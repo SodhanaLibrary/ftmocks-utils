@@ -4,7 +4,7 @@
   "description": "Util functions for FtMocks",
   "main": "src/index.js",
   "scripts": {
-    "test": "node test.js"
+    "test": "node tests/test.js"
   },
   "repository": {
     "type": "git",
