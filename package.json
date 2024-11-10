@@ -1,0 +1,20 @@
+{
+  "name": "ftmocks-utils",
+  "version": "1.0.0",
+  "description": "Util functions for FtMocks",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SodhanaLibrary/ftmocks-utils.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/SodhanaLibrary/ftmocks-utils/issues"
+  },
+  "homepage": "https://github.com/SodhanaLibrary/ftmocks-utils#readme"
+}
