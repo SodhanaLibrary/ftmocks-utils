@@ -5,6 +5,34 @@ export const nameToFolder = name => {
   return name.replaceAll(' ', '_');
 };
 
+const areJsonEqual = (jsonObj1, jsonObj2) => {
+  // Check if both are objects and not null
+  if (typeof jsonObj1 === 'object' && jsonObj1 !== null &&
+      typeof jsonObj2 === 'object' && jsonObj2 !== null) {
+    
+    // Get the keys of both objects
+    const keys1 = Object.keys(jsonObj1);
+    const keys2 = Object.keys(jsonObj2);
+    
+    // Check if the number of keys is different
+    if (keys1.length !== keys2.length) {
+      return false;
+    }
+    
+    // Recursively check each key-value pair
+    for (let key of keys1) {
+      if (!keys2.includes(key) || !areJsonEqual(jsonObj1[key], jsonObj2[key])) {
+        return false;
+      }
+    }
+    
+    return true;
+  } else {
+    // For non-object types, use strict equality comparison
+    return jsonObj1 === jsonObj2;
+  }
+}
+
 const getDefaultMockDataFromConfig = (testConfig) => {
   const defaultPath = path.join(testConfig.MOCK_DIR, testConfig.MOCK_DEFAULT_FILE);
 
@@ -51,9 +79,10 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
       mock.fileContent = fileContent;
     });
 
+    
     return mocks;
   } catch (error) {
-    console.error('Error loading test data:', error.message);
+    console.debug('Error loading test data:', error.message);
     return [];
   }
 };
@@ -104,9 +133,44 @@ function compareMockToFetchRequest(mock, fetchReq) {
   const postData = mock.fileContent.request?.postData?.text ? JSON.parse(mock.fileContent.request?.postData?.text) : mock.fileContent.request?.postData;
   return isSameRequest({url: mockURL, method: mock.fileContent.method, postData}, {
     method: fetchReq.options.method || 'GET',
-    postData: fetchReq.options.body,
+    postData: fetchReq.options.body?.length ? JSON.parse(fetchReq.options.body) : fetchReq.options.body,
     url: reqURL,
   });
+}
+
+function getMatchingMockData({testMockData, defaultMockData, url, options, testConfig, testName}) {
+  let served = false;
+  let matchedMocks = testMockData?.filter(mock => {
+    if (mock.fileContent.waitForPrevious && !served) {
+      return false;
+    }
+    served = mock.fileContent.served;
+    return compareMockToFetchRequest(mock, { url, options });
+  }) || [];
+  let foundMock = matchedMocks.find(mock => !mock.fileContent.served) ? matchedMocks.find(mock => !mock.fileContent.served) : matchedMocks[0];
+  // updating stats to mock file
+  if(foundMock) {
+    const mockFilePath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${foundMock.id}.json`);
+    foundMock.fileContent.served = true;
+    fs.writeFileSync(mockFilePath, JSON.stringify(foundMock.fileContent, null, 2));
+  }
+  
+  if(!foundMock) {
+    foundMock = defaultMockData.find(tm => compareMockToFetchRequest(tm, {
+      url,
+      options
+    }));
+  }
+  return foundMock ? foundMock.fileContent : null;
+}
+
+async function resetAllMockStats({testMockData, testConfig, testName}) {
+  for(let i=0; i<testMockData.length; i++) {
+    const tmd = testMockData[i];
+    const mockFilePath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${tmd.id}.json`);
+    tmd.fileContent.served = false;
+    await fs.writeFileSync(mockFilePath, JSON.stringify(tmd.fileContent, null, 2));
+  }
 }
 
 
@@ -118,5 +182,7 @@ module.exports = {
     loadMockDataFromConfig,
     getDefaultMockDataFromConfig,
     nameToFolder,
-    compareMockToFetchRequest
+    compareMockToFetchRequest,
+    getMatchingMockData,
+    resetAllMockStats
 };
