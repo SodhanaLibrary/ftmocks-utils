@@ -34,7 +34,7 @@ const areJsonEqual = (jsonObj1, jsonObj2) => {
 }
 
 const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(testConfig.MOCK_DIR, testConfig.MOCK_DEFAULT_FILE);
+  const defaultPath = path.join(testConfig.MOCK_DIR, 'defaultMocks');
 
 try {
   const defaultData = fs.readFileSync(defaultPath, 'utf8');
@@ -42,7 +42,7 @@ try {
   
   // Read and attach mock data for each entry in parsedData
   parsedData.forEach(entry => {
-    const mockFilePath = path.join(testConfig.MOCK_DIR, testConfig.MOCK_DEFAULT_DIR, `mock_${entry.id}.json`);;
+    const mockFilePath = path.join(testConfig.MOCK_DIR, 'defaultMocks', `mock_${entry.id}.json`);;
     try {
       const mockData = fs.readFileSync(mockFilePath, 'utf8');
       entry.fileContent = JSON.parse(mockData);
@@ -53,7 +53,7 @@ try {
   });
   return parsedData;
 } catch (error) {
-  console.error(`Error reading or parsing ${testConfig.MOCK_DEFAULT_FILE}:`, error);
+  console.error(`Error reading or parsing default.json:`, error);
   return [];
 }
 }
@@ -69,7 +69,7 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
       const config = JSON.parse(configData);
       testName = config.testName;
     }
-    // Read the tests from testConfig.MOCK_TEST_FILE
+    // Read the tests from testConfig
     const mocksPath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, '_mock_list.json');
     const mocksData = fs.readFileSync(mocksPath, 'utf8');
     const mocks = JSON.parse(mocksData);
