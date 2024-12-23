@@ -34,7 +34,7 @@ const areJsonEqual = (jsonObj1, jsonObj2) => {
 }
 
 const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(testConfig.MOCK_DIR, 'defaultMocks');
+  const defaultPath = path.join(testConfig.MOCK_DIR, 'default.json');
 
 try {
   const defaultData = fs.readFileSync(defaultPath, 'utf8');
@@ -87,7 +87,17 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
   }
 };
 
+const clearNulls = postData => {
+  Object.keys(postData || {}).forEach(key => {
+    if(postData[key] === null) {
+      delete postData[key];
+    }
+  });
+};
+
 const isSameRequest = (req1, req2) => {
+  clearNulls(req1.postData);
+  clearNulls(req2.postData);
   let matched = true;
   if(req1.url !== req2.url) {
     matched = false;
@@ -147,7 +157,7 @@ function getMatchingMockData({testMockData, defaultMockData, url, options, testC
     served = mock.fileContent.served;
     return compareMockToFetchRequest(mock, { url, options });
   }) || [];
-  let foundMock = matchedMocks.find(mock => !mock.fileContent.served) ? matchedMocks.find(mock => !mock.fileContent.served) : matchedMocks[0];
+  let foundMock = matchedMocks.find(mock => !mock.fileContent.served) ? matchedMocks.find(mock => !mock.fileContent.served) : matchedMocks[matchedMocks.length - 1];
   // updating stats to mock file
   if(foundMock) {
     const mockFilePath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${foundMock.id}.json`);
