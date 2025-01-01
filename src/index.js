@@ -281,6 +281,47 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
   return;
 };
 
+
+function countFilesInDirectory(directoryPath) {
+  return new Promise((resolve, reject) => {
+    fs.readdir(directoryPath, (err, files) => {
+      if (err) {
+        return reject(err); // Handle error
+      }
+
+      // Filter out directories and only count files
+      const fileCount = files.filter(file => {
+        const filePath = path.join(directoryPath, file);
+        return fs.statSync(filePath).isFile();
+      }).length;
+
+      resolve(fileCount);
+    });
+  });
+}
+
+const saveSnap = async (html, ftmocksConifg, testName) => {
+  const snapFolder = path.join(ftmocksConifg.MOCK_DIR, `test_${nameToFolder(testName)}`, '_snaps');
+  const snapTemplate = path.join(ftmocksConifg.MOCK_DIR, 'snap_template.html');
+  
+  if (!fs.existsSync(snapFolder)) {
+    fs.mkdirSync(snapFolder);
+  }
+  const fileCount =  await (countFilesInDirectory(snapFolder));
+  const snapFilePath = path.join(snapFolder, `snap_${fileCount + 1}.html`);
+  let resHtml = html;
+  if (fs.existsSync(snapFolder)) {
+    const templateHtml = fs.readFileSync(snapTemplate, 'utf8');;
+    resHtml = templateHtml.replace('<!--FtMocks-Snap-Template-To-Be-Replaced-->', html)
+  }
+  fs.writeFileSync(snapFilePath, resHtml)
+};
+
+const deleteAllSnaps = async (ftmocksConifg, testName) => {
+  const snapFolder = path.join(ftmocksConifg.MOCK_DIR, `test_${nameToFolder(testName)}`, '_snaps');
+  fs.rmSync(snapFolder, { recursive: true, force: true });
+};
+
 // Export functions as a module
 module.exports = {
     compareMockToRequest,
@@ -292,5 +333,7 @@ module.exports = {
     compareMockToFetchRequest,
     getMatchingMockData,
     resetAllMockStats,
-    initiateJestFetch
+    initiateJestFetch,
+    saveSnap,
+    deleteAllSnaps
 };

@@ -2,10 +2,12 @@
     // Intercept Fetch API
     const originalFetch = window.fetch;
     const recordedTracks = [];
-
+  
     const addTrack = track => {
         track.id = recordedTracks.length ? recordedTracks[recordedTracks.length - 1].id + 1 : 1;
         track.time = new Date();
+        track.bodyHtml = document.documentElement.outerHTML.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');;
+        
         fetch(window.FTMOCKS_CONFIG.record_events_url, {
                     method: 'POST',
                     headers: {
@@ -14,8 +16,8 @@
                     body: JSON.stringify(track),
                 }).then(response => response.json());
     };
-
-
+  
+  
     window.fetch = async function (url, options = {}) {
         const method = options.method || 'GET';
         const body = options.body;
@@ -60,10 +62,10 @@
         });
         return response;
     };
-
+  
     // Intercept XMLHttpRequest
     const originalXHR = window.XMLHttpRequest;
-
+  
     function MockXHR() {
         const xhr = new originalXHR();
         const originalOpen = xhr.open;
@@ -72,7 +74,7 @@
         let requestDetails = {
             headers: {},
         };
-
+  
         // Override 'open' method
         xhr.open = function (method, url, async, user, password) {
             requestDetails.method = method;
@@ -83,13 +85,13 @@
             requestDetails.queryString = url.includes('?') ? url.split('?')[1] : null;
             originalOpen.apply(xhr, arguments);
         };
-
+  
         // Override 'setRequestHeader' to log headers
         xhr.setRequestHeader = function (header, value) {
             requestDetails.headers[header] = value;
             originalSetRequestHeader.apply(xhr, arguments);
         };
-
+  
         // Override 'send' method
         xhr.send = function (body) {
             requestDetails.body = body;
@@ -124,63 +126,63 @@
                             },
                             body: JSON.stringify(mockResponse),
                         }).then(response => response.json());
-
+  
                     }
                 }
                 if (originalOnReadyStateChange) originalOnReadyStateChange.apply(xhr, arguments);
             };
             originalSend.apply(xhr, arguments);
         };
-
+  
         return xhr;
     }
-
+  
     window.XMLHttpRequest = MockXHR;
-
-
+  
+  
     const generateXPathWithNearestParentId = (element) => {
         let path = '';
         let nearestParentId = null;
-
+  
         // Check if the current element's has an ID
         if (element.id) {
             nearestParentId = element.id;
         }
-
+  
         while (!nearestParentId && element !== document.body && element) {
             const tagName = element.tagName.toLowerCase();
             let index = 1;
             let sibling = element.previousElementSibling;
-
+  
             while (sibling) {
                 if (sibling.tagName.toLowerCase() === tagName) {
                     index += 1;
                 }
                 sibling = sibling.previousElementSibling;
             }
-
+  
             if (index === 1) {
                 path = `/${tagName}${path}`;
             } else {
                 path = `/${tagName}[${index}]${path}`;
             }
-
+  
             // Check if the current element's parent has an ID
             if (element.parentElement && element.parentElement.id) {
                 nearestParentId = element.parentElement.id;
                 break; // Stop searching when we find the nearest parent with an ID
             }
-
+  
             element = element.parentElement;
         }
-
+  
         if (nearestParentId) {
             path = `//*[@id='${nearestParentId}']${path}`;
             return path;
         }
         return null; // No parent with an ID found
     };
-
+  
     const handleMouseEvent = (type, limit) => event => {
         const target = generateXPathWithNearestParentId(event.target);
         const track = {
@@ -195,7 +197,7 @@
         recordedTracks.push(track);
         addTrack(track);
     };
-
+  
     const handleChange = limit => event => {
         const prevCommand =
             recordedTracks && recordedTracks.length ? recordedTracks[recordedTracks.length - 1] : null;
@@ -220,7 +222,7 @@
         recordedTracks.push(track);
         addTrack(track);
     };
-
+  
     const handleDocumentLoad = limit => () => {
         let oldHref = document.location.href;
         const body = document.querySelector('body');
@@ -242,15 +244,15 @@
         });
         observer.observe(body, { childList: true, subtree: true });
     };
-
+  
     const clearTracks = () => {
         recordedTracks = [];
     };
-
+  
     const getAllTracks = () => {
         return recordedTracks;
     };
-
+  
     const initTracks = (initInfo = {events: ['click', 'change', 'url', 'dblclick', 'contextmenu'], limit: 100}) => {
         const {events, limit} = initInfo;
         const mouseEvents = {
@@ -276,5 +278,5 @@
         });
     };
     initTracks();
-
-})();
+  
+  })();
