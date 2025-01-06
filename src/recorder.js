@@ -1,3 +1,9 @@
+window.FTMOCKS_CONFIG = {
+    record_mocks_url: 'http://localhost:5000/api/v1/recordMockdata',
+    record_events_url: 'http://localhost:5000/api/v1/recordedEvents'
+};
+
+
 (function () {
     // Intercept Fetch API
     const originalFetch = window.fetch;
