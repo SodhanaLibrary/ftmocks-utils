@@ -1,9 +1,16 @@
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs')
+const path = require('path')
 
-export const nameToFolder = name => {
+const nameToFolder = name => {
   return name.replaceAll(' ', '_');
 };
+
+const getMockDir = config => {
+  if(!path.isAbsolute(config.MOCK_DIR)) {
+    return path.resolve( process.cwd(), config.MOCK_DIR);
+  }
+  return config.MOCK_DIR;
+}
 
 const areJsonEqual = (jsonObj1, jsonObj2) => {
   // Check if both are objects and not null
@@ -34,7 +41,7 @@ const areJsonEqual = (jsonObj1, jsonObj2) => {
 }
 
 const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(testConfig.MOCK_DIR, 'default.json');
+  const defaultPath = path.join(getMockDir(testConfig), 'default.json');
 
 try {
   const defaultData = fs.readFileSync(defaultPath, 'utf8');
@@ -42,7 +49,7 @@ try {
   
   // Read and attach mock data for each entry in parsedData
   parsedData.forEach(entry => {
-    const mockFilePath = path.join(testConfig.MOCK_DIR, 'defaultMocks', `mock_${entry.id}.json`);;
+    const mockFilePath = path.join(getMockDir(testConfig), 'defaultMocks', `mock_${entry.id}.json`);;
     try {
       const mockData = fs.readFileSync(mockFilePath, 'utf8');
       entry.fileContent = JSON.parse(mockData);
@@ -64,18 +71,18 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
     let testName = _testName;
     if(!testName) {
       // Read the test ID from mockServer.config.json
-      const configPath = path.join(testConfig.MOCK_DIR, 'mockServer.config.json');
+      const configPath = path.join(getMockDir(testConfig), 'mockServer.config.json');
       const configData = fs.readFileSync(configPath, 'utf8');
       const config = JSON.parse(configData);
       testName = config.testName;
     }
     // Read the tests from testConfig
-    const mocksPath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, '_mock_list.json');
+    const mocksPath = path.join(getMockDir(testConfig), `test_${nameToFolder(testName)}`, '_mock_list.json');
     const mocksData = fs.readFileSync(mocksPath, 'utf8');
     const mocks = JSON.parse(mocksData);
 
     mocks.forEach(mock => {
-      const fileContent = JSON.parse(fs.readFileSync(path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${mock.id}.json`), 'utf8'));
+      const fileContent = JSON.parse(fs.readFileSync(path.join(getMockDir(testConfig), `test_${nameToFolder(testName)}`, `mock_${mock.id}.json`), 'utf8'));
       mock.fileContent = fileContent;
     });
 
@@ -160,7 +167,7 @@ function getMatchingMockData({testMockData, defaultMockData, url, options, testC
   let foundMock = matchedMocks.find(mock => !mock.fileContent.served) ? matchedMocks.find(mock => !mock.fileContent.served) : matchedMocks[matchedMocks.length - 1];
   // updating stats to mock file
   if(foundMock) {
-    const mockFilePath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${foundMock.id}.json`);
+    const mockFilePath = path.join(getMockDir(testConfig), `test_${nameToFolder(testName)}`, `mock_${foundMock.id}.json`);
     foundMock.fileContent.served = true;
     fs.writeFileSync(mockFilePath, JSON.stringify(foundMock.fileContent, null, 2));
   }
@@ -177,7 +184,7 @@ function getMatchingMockData({testMockData, defaultMockData, url, options, testC
 async function resetAllMockStats({testMockData, testConfig, testName}) {
   for(let i=0; i<testMockData.length; i++) {
     const tmd = testMockData[i];
-    const mockFilePath = path.join(testConfig.MOCK_DIR, `test_${nameToFolder(testName)}`, `mock_${tmd.id}.json`);
+    const mockFilePath = path.join(getMockDir(testConfig), `test_${nameToFolder(testName)}`, `mock_${tmd.id}.json`);
     tmd.fileContent.served = false;
     await fs.writeFileSync(mockFilePath, JSON.stringify(tmd.fileContent, null, 2));
   }
@@ -301,8 +308,8 @@ function countFilesInDirectory(directoryPath) {
 }
 
 const saveSnap = async (html, ftmocksConifg, testName) => {
-  const snapFolder = path.join(ftmocksConifg.MOCK_DIR, `test_${nameToFolder(testName)}`, '_snaps');
-  const snapTemplate = path.join(ftmocksConifg.MOCK_DIR, 'snap_template.html');
+  const snapFolder = path.join(getMockDir(ftmocksConifg), `test_${nameToFolder(testName)}`, '_snaps');
+  const snapTemplate = path.join(getMockDir(ftmocksConifg), 'snap_template.html');
   
   if (!fs.existsSync(snapFolder)) {
     fs.mkdirSync(snapFolder);
@@ -318,7 +325,7 @@ const saveSnap = async (html, ftmocksConifg, testName) => {
 };
 
 const deleteAllSnaps = async (ftmocksConifg, testName) => {
-  const snapFolder = path.join(ftmocksConifg.MOCK_DIR, `test_${nameToFolder(testName)}`, '_snaps');
+  const snapFolder = path.join(getMockDir(ftmocksConifg), `test_${nameToFolder(testName)}`, '_snaps');
   fs.rmSync(snapFolder, { recursive: true, force: true });
 };
 
