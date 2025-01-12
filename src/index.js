@@ -1,4 +1,6 @@
+// import fs from 'fs';
 const fs = require('fs')
+// import path from 'path';
 const path = require('path')
 
 const nameToFolder = name => {
@@ -145,14 +147,20 @@ function compareMockToRequest(mock, req) {
 }
 
 function compareMockToFetchRequest(mock, fetchReq) {
-  const mockURL = processURL(mock.fileContent.url, mock.fileContent.ignoreParams);
-  const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
-  const postData = mock.fileContent.request?.postData?.text ? JSON.parse(mock.fileContent.request?.postData?.text) : mock.fileContent.request?.postData;
-  return isSameRequest({url: mockURL, method: mock.fileContent.method, postData}, {
-    method: fetchReq.options.method || 'GET',
-    postData: fetchReq.options.body?.length ? JSON.parse(fetchReq.options.body) : fetchReq.options.body,
-    url: reqURL,
-  });
+  try{
+    const mockURL = processURL(mock.fileContent.url, mock.fileContent.ignoreParams);
+    const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
+    const postData = mock.fileContent.request?.postData?.text ? JSON.parse(mock.fileContent.request?.postData?.text) : mock.fileContent.request?.postData;
+    return isSameRequest({url: mockURL, method: mock.fileContent.method, postData}, {
+      method: fetchReq.options.method || 'GET',
+      postData: fetchReq.options.body?.length ? JSON.parse(fetchReq.options.body) : fetchReq.options.body,
+      url: reqURL,
+    });
+  } catch(e) {
+    console.debug('error at compareMockToFetchRequest', mock, fetchReq);
+    console.debug(e);
+  }
+  return false;
 }
 
 function getMatchingMockData({testMockData, defaultMockData, url, options, testConfig, testName}) {
@@ -194,7 +202,9 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
   const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
   resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
+  console.debug('calling initiateJestFetch fetch');
   global.fetch = jest.fn((url, options = {}) => {
+    console.debug('got fetch request', url, options);
     let mockData = getMatchingMockData({testMockData, defaultMockData, url, options, testConfig: ftmocksConifg, testName});
     if (mockData) {
       console.debug('mocked', url, options);
@@ -216,6 +226,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
     });
   });
 
+  console.debug('calling XMLHttpRequest fetch');
   global.XMLHttpRequest = jest.fn(function () {
     const xhrMock = {
       open: jest.fn(),
@@ -288,6 +299,46 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
   return;
 };
 
+function initiateConsoleLogs(jest, ftmocksConifg, testName) {
+  const logsFile = path.join(getMockDir(ftmocksConifg), `test_${nameToFolder(testName)}`, '_logs.json');
+  let logs = [];
+  if(!fs.existsSync(logsFile)) {
+    fs.appendFileSync(logsFile, '[]', 'utf8');
+  } else {
+    fs.writeFileSync(logsFile, '[]', 'utf8');
+  }
+
+  const writeToFile = (type, params) => {
+    const logMessage = params.join(' ') + '\n'; // Combine params into a string with spaces
+    logs.push({
+      type,
+      message: logMessage,
+      time: Date.now()
+    });
+    fs.writeFileSync(logsFile, JSON.stringify(logs, null, 2), 'utf8'); // Append the log message to the file
+  } 
+    
+  global.console = {
+    ...console,
+    // uncomment to ignore a specific log level
+    log: jest.fn((...params) => {
+      writeToFile('log', params);
+    }),
+    debug: jest.fn((...params) => {
+      writeToFile('debug', params);
+    }),
+    info: jest.fn((...params) => {
+      writeToFile('info', params);
+    }),
+    warn: jest.fn((...params) => {
+      writeToFile('warn', params);
+    }),
+    error: jest.fn((...params) => {
+      writeToFile('error', params);
+    }),
+  };
+}
+
 
 function countFilesInDirectory(directoryPath) {
   return new Promise((resolve, reject) => {
@@ -329,6 +380,14 @@ const deleteAllSnaps = async (ftmocksConifg, testName) => {
   fs.rmSync(snapFolder, { recursive: true, force: true });
 };
 
+const deleteAllLogs = async (ftmocksConifg, testName) => {
+  const mockDir = path.join(getMockDir(ftmocksConifg), `test_${nameToFolder(testName)}`);
+  const logFilePath = path.join(mockDir, `_logs.json`);
+  fs.rmSync(logFilePath, { recursive: true, force: true });
+};
+
+
+
 // Export functions as a module
 module.exports = {
     compareMockToRequest,
@@ -342,5 +401,7 @@ module.exports = {
     resetAllMockStats,
     initiateJestFetch,
     saveSnap,
-    deleteAllSnaps
+    deleteAllSnaps,
+    deleteAllLogs,
+    initiateConsoleLogs
 };
