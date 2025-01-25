@@ -198,6 +198,49 @@ async function resetAllMockStats({testMockData, testConfig, testName}) {
   }
 }
 
+async function initiatePlaywrightRoutes (page, ftmocksConifg, testName) {
+  const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
+  resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
+  const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
+  console.debug('calling initiatePlaywrightRoutes fetch');
+  await page.route('**/*', async (route, request) => {
+    const url = request.url();
+    const options = {
+      options: {
+        url,
+        method: request.method(),
+        body: request.postData(),
+      }
+    }
+    console.debug('got fetch request', request.method(), request.url(), request.postData());
+    let mockData = getMatchingMockData({testMockData, defaultMockData, url, options, testConfig: ftmocksConifg, testName});
+    if (mockData) {
+      console.debug('mocked', url, options);
+    } else {
+      console.debug('missing mock data', url, options);
+      return route.fulfill({
+        status: 404,
+        headers: new Map([['content-type', 'application/json']]),
+        json: () => Promise.resolve({ error: 'Mock data not found' }),
+      });
+    }
+  
+    const { content, headers, status } = mockData.response;
+    
+    const json = {
+      status,
+      headers,
+      json: () => Promise.resolve(JSON.parse(content)),
+    };
+
+    if(json) {
+      await route.fulfill(json);
+    } else {
+      await route.fallback();
+    }
+  });
+}
+
 async function initiateJestFetch (jest, ftmocksConifg, testName) {
   const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
   resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
@@ -403,5 +446,6 @@ module.exports = {
     saveSnap,
     deleteAllSnaps,
     deleteAllLogs,
-    initiateConsoleLogs
+    initiateConsoleLogs,
+    initiatePlaywrightRoutes
 };
