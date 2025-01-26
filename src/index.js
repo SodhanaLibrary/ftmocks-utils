@@ -216,26 +216,16 @@ async function initiatePlaywrightRoutes (page, ftmocksConifg, testName) {
     let mockData = getMatchingMockData({testMockData, defaultMockData, url, options, testConfig: ftmocksConifg, testName});
     if (mockData) {
       console.debug('mocked', url, options);
-    } else {
-      console.debug('missing mock data', url, options);
-      return route.fulfill({
-        status: 404,
-        headers: new Map([['content-type', 'application/json']]),
-        json: () => Promise.resolve({ error: 'Mock data not found' }),
-      });
-    }
-  
-    const { content, headers, status } = mockData.response;
-    
-    const json = {
-      status,
-      headers,
-      json: () => Promise.resolve(JSON.parse(content)),
-    };
+      const { content, headers, status } = mockData.response;
+      const json = {
+        status,
+        headers,
+        body: content,
+      };
 
-    if(json) {
       await route.fulfill(json);
     } else {
+      console.debug('missing mock data', url, options);
       await route.fallback();
     }
   });
