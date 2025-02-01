@@ -110,7 +110,7 @@ const isSameRequest = (req1, req2) => {
   let matched = true;
   if(req1.url !== req2.url) {
     matched = false;
-  } else if(req1.method !== req2.method) {
+  } else if(req1.method?.toLowerCase() !== req2.method?.toLowerCase()) {
     matched = false;
   } else if((!req1.postData && req2.postData) || (req1.postData && !req2.postData)) {
     matched = areJsonEqual(req1.postData || {} ,  req2.postData || {});
@@ -219,7 +219,7 @@ async function initiatePlaywrightRoutes (page, ftmocksConifg, testName) {
       const { content, headers, status } = mockData.response;
       const json = {
         status,
-        headers,
+        headers: new Map(Object.entries(headers)),
         body: content,
       };
 
@@ -254,7 +254,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
     
     return Promise.resolve({
       status,
-      headers,
+      headers: new Map(Object.entries(headers)),
       json: () => Promise.resolve(JSON.parse(content)),
     });
   });
@@ -419,6 +419,17 @@ const deleteAllLogs = async (ftmocksConifg, testName) => {
   fs.rmSync(logFilePath, { recursive: true, force: true });
 };
 
+function initiateJestEventSnaps(jest, ftmocksConifg, testName) {
+  const mouseEvents = ftmocksConifg.snapEvents || ['click', 'change', 'url', 'dblclick', 'contextmenu'];
+  mouseEvents.forEach(event => {
+    jest.spyOn(document, 'addEventListener').mockImplementation((e, callback) => {
+      if (mouseEvents.includes(e)) {
+        saveSnap(document.outerHTML, ftmocksConifg, testName);
+      }
+    });
+  });
+}
+
 
 
 // Export functions as a module
@@ -437,5 +448,6 @@ module.exports = {
     deleteAllSnaps,
     deleteAllLogs,
     initiateConsoleLogs,
-    initiatePlaywrightRoutes
+    initiatePlaywrightRoutes,
+    initiateJestEventSnaps
 };
