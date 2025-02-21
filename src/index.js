@@ -198,12 +198,12 @@ async function resetAllMockStats({testMockData, testConfig, testName}) {
   }
 }
 
-async function initiatePlaywrightRoutes (page, ftmocksConifg, testName) {
+async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, path = '**/*') {
   const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
   resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
   console.debug('calling initiatePlaywrightRoutes fetch');
-  await page.route('**/*', async (route, request) => {
+  await page.route(path, async (route, request) => {
     const url = request.url();
     const options = {
       options: {
