@@ -14,6 +14,14 @@ const getMockDir = config => {
   return config.MOCK_DIR;
 }
 
+const getFallbackDir = config => {
+  if(config.FALLBACK_DIR && !path.isAbsolute(config.FALLBACK_DIR)) {
+    return path.resolve( process.cwd(), config.FALLBACK_DIR);
+  }
+  return config.FALLBACK_DIR;
+}
+
+
 const areJsonEqual = (jsonObj1, jsonObj2) => {
   // Check if both are objects and not null
   if (typeof jsonObj1 === 'object' && jsonObj1 !== null &&
@@ -198,12 +206,12 @@ async function resetAllMockStats({testMockData, testConfig, testName}) {
   }
 }
 
-async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, path = '**/*') {
+async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, mockPath = '**/*') {
   const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
   resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
   console.debug('calling initiatePlaywrightRoutes fetch');
-  await page.route(path, async (route, request) => {
+  await page.route(mockPath, async (route, request) => {
     const url = request.url();
     const options = {
       options: {
@@ -226,7 +234,34 @@ async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, path = '
       await route.fulfill(json);
     } else {
       console.debug('missing mock data', url, options);
-      await route.fallback();
+      const fallbackDir = getFallbackDir(ftmocksConifg);
+      if(!fallbackDir) {
+        await route.fallback();
+        return;
+      }
+      const urlObj = new URL(route.request().url());
+      const filePath = path.join(fallbackDir, urlObj.pathname === '/' || urlObj.pathname === '' ? (ftmocksConifg.FALLBACK_DIR_INDEX_FILE || 'index.html') : urlObj.pathname);
+      console.debug('serving file ', filePath);
+      if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+        const fileContent = fs.readFileSync(filePath);
+        const ext = path.extname(filePath);
+        const contentType = {
+          '.html': 'text/html',
+          '.css': 'text/css',
+          '.js': 'application/javascript',
+          '.json': 'application/json',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+        }[ext] || 'application/octet-stream';
+
+        console.debug('serving file', filePath);
+        await route.fulfill({
+          body: fileContent,
+          headers: { 'Content-Type': contentType },
+        });
+      } else {
+        await route.fallback();
+      }
     }
   });
 }
