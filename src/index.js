@@ -21,6 +21,18 @@ const getFallbackDir = config => {
   return config.FALLBACK_DIR;
 }
 
+const capitalizeHeader = header => {
+  return header
+    .split('-')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join('-');
+}
+
+const capitalizeHeaders = headers => {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [capitalizeHeader(key), value])
+  );
+};
 
 const areJsonEqual = (jsonObj1, jsonObj2) => {
   // Check if both are objects and not null
@@ -206,7 +218,7 @@ async function resetAllMockStats({testMockData, testConfig, testName}) {
   }
 }
 
-async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, mockPath = '**/*') {
+async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, mockPath = '**/*', excludeMockPath = null) {
   const testMockData = testName ? loadMockDataFromConfig(ftmocksConifg, testName) : [];
   resetAllMockStats({testMockData, testConfig: ftmocksConifg, testName});
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
@@ -220,14 +232,19 @@ async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, mockPath
         body: request.postData(),
       }
     }
+    if (excludeMockPath && new RegExp(excludeMockPath).test(url)) {
+      await route.fallback();
+      return;
+    }
     console.debug('got fetch request', request.method(), request.url(), request.postData());
     let mockData = getMatchingMockData({testMockData, defaultMockData, url, options, testConfig: ftmocksConifg, testName});
     if (mockData) {
       console.debug('mocked', url, options);
       const { content, headers, status } = mockData.response;
+      
       const json = {
         status,
-        headers: new Map(Object.entries(headers)),
+        headers: new Map(Object.entries(capitalizeHeaders(headers))),
         body: content,
       };
 
@@ -280,7 +297,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
       console.debug('missing mock data', url, options);
       return Promise.resolve({
         status: 404,
-        headers: new Map([['content-type', 'application/json']]),
+        headers: new Map([['Content-Type', 'application/json']]),
         json: () => Promise.resolve({ error: 'Mock data not found' }),
       });
     }
@@ -289,7 +306,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
     
     return Promise.resolve({
       status,
-      headers: new Map(Object.entries(headers)),
+      headers: new Map(Object.entries(capitalizeHeaders(headers))),
       json: () => Promise.resolve(JSON.parse(content)),
     });
   });
@@ -310,6 +327,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
       status: 0,
       response: null,
       responseText: '',
+      headers: new Map(Object.entries(capitalizeHeaders(headers))),
       onreadystatechange: null,
       onload: null,
       onerror: null,
@@ -332,7 +350,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
         xhrMock.status = status;
         xhrMock.responseText = content;
         xhrMock.response = content;
-        xhrMock.headers = headers;
+        xhrMock.headers = new Map(Object.entries(capitalizeHeaders(headers)));
   
         if (xhrMock.onreadystatechange) {
           xhrMock.onreadystatechange();
