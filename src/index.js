@@ -34,6 +34,17 @@ const capitalizeHeaders = headers => {
   );
 };
 
+const getHeaders = headers => {
+  let res = null;
+  try {
+    res = new Map([...Object.entries(headers), ...Object.entries(capitalizeHeaders(headers))]);
+  } catch(e) {
+    console.debug('error at getHeaders', e);
+    res = new Map([['Content-Type', 'application/json'], ['content-type', 'application/json']]);
+  }
+  return Object.fromEntries(res);
+}
+
 const areJsonEqual = (jsonObj1, jsonObj2) => {
   // Check if both are objects and not null
   if (typeof jsonObj1 === 'object' && jsonObj1 !== null &&
@@ -244,7 +255,7 @@ async function initiatePlaywrightRoutes (page, ftmocksConifg, testName, mockPath
       
       const json = {
         status,
-        headers: new Map(Object.entries(capitalizeHeaders(headers))),
+        headers: getHeaders(headers),
         body: content,
       };
 
@@ -306,7 +317,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
     
     return Promise.resolve({
       status,
-      headers: new Map(Object.entries(capitalizeHeaders(headers))),
+      headers: getHeaders(headers),
       json: () => Promise.resolve(JSON.parse(content)),
     });
   });
@@ -327,7 +338,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
       status: 0,
       response: null,
       responseText: '',
-      headers: new Map(Object.entries(capitalizeHeaders(headers))),
+      headers: getHeaders(headers),
       onreadystatechange: null,
       onload: null,
       onerror: null,
@@ -350,7 +361,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
         xhrMock.status = status;
         xhrMock.responseText = content;
         xhrMock.response = content;
-        xhrMock.headers = new Map(Object.entries(capitalizeHeaders(headers)));
+        xhrMock.headers = getHeaders(headers);
   
         if (xhrMock.onreadystatechange) {
           xhrMock.onreadystatechange();
