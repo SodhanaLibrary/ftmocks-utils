@@ -317,7 +317,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
     
     return Promise.resolve({
       status,
-      headers: getHeaders(headers),
+      headers: new Map(Object.entries(headers)),
       json: () => Promise.resolve(JSON.parse(content)),
     });
   });
@@ -338,7 +338,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
       status: 0,
       response: null,
       responseText: '',
-      headers: getHeaders(headers),
+      headers: new Map(Object.entries(headers)),
       onreadystatechange: null,
       onload: null,
       onerror: null,
@@ -361,7 +361,7 @@ async function initiateJestFetch (jest, ftmocksConifg, testName) {
         xhrMock.status = status;
         xhrMock.responseText = content;
         xhrMock.response = content;
-        xhrMock.headers = getHeaders(headers);
+        xhrMock.headers = new Map(Object.entries(headers));
   
         if (xhrMock.onreadystatechange) {
           xhrMock.onreadystatechange();
