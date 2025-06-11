@@ -1,7 +1,6 @@
-// import fs from 'fs';
 const fs = require("fs");
-// import path from 'path';
 const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 
 const nameToFolder = (name) => {
   return name.replaceAll(" ", "_");
@@ -636,6 +635,252 @@ function initiateJestEventSnaps(jest, ftmocksConifg, testName) {
   });
 }
 
+const createTest = async (ftmocksConifg, testName) => {
+  const testsPath = path.join(getMockDir(ftmocksConifg), "tests.json");
+  let tests = [];
+  try {
+    // Read existing tests
+    const testsData = fs.readFileSync(testsPath, "utf8");
+    tests = JSON.parse(testsData);
+    const etest = tests.find((tst) => tst.name === testName);
+    if (!etest) {
+      const newTest = {
+        id: uuidv4(),
+        name: testName,
+      };
+      tests.push(newTest);
+      fs.writeFileSync(testsPath, JSON.stringify(tests, null, 2));
+      const folderPath = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(testName)}`
+      );
+      const mockListFilePath = path.join(folderPath, "_mock_list.json");
+      fs.mkdir(folderPath, { recursive: true }, (err) => {
+        if (err) {
+          console.error("Error creating directory:", err);
+        } else {
+          console.log("Directory created successfully!");
+        }
+      });
+      await fs.appendFile(mockListFilePath, "[]", () => {
+        console.log("mock list file created successfully");
+      });
+
+      return newTest;
+    } else {
+      throw "Test already exists";
+    }
+  } catch (error) {
+    console.error(`Error reading tests.json:`, error);
+    return null;
+  }
+};
+
+const isSameResponse = (req1, req2) => {
+  try {
+    let matched = true;
+    if (req1.response.status !== req2.response.status) {
+      matched = false;
+      // console.log('not matched at url', req1.method, req2.method);
+    } else if (
+      (!req1.response.content && req2.response.content) ||
+      (req1.response.content && !req2.response.content)
+    ) {
+      matched = areJsonEqual(
+        JSON.parse(req1.response.content) || {},
+        JSON.parse(req2.response.content) || {}
+      );
+      // console.log('not matched at post Data 0', req1.postData, req2.postData);
+    } else if (
+      req1.response.content &&
+      req2.response.content &&
+      !areJsonEqual(
+        JSON.parse(req1.response.content) || {},
+        JSON.parse(req2.response.content) || {}
+      )
+    ) {
+      matched = false;
+    }
+    // if (matched) {
+    //   console.log('matched responses', req1, req2);
+    // }
+    return matched;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};
+
+const compareMockToMock = (mock1, mock2, matchResponse) => {
+  try {
+    if (matchResponse) {
+      return isSameRequest(mock1, mock2) && isSameResponse(mock1, mock2);
+    } else {
+      return isSameRequest(mock1, mock2);
+    }
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};
+
+const saveIfItIsFile = async (route, testName, ftmocksConifg) => {
+  const urlObj = new URL(route.request().url());
+
+  // Check if URL contains file extension like .js, .png, .css etc
+  const fileExtMatch = urlObj.pathname.match(/\.[a-zA-Z0-9]+$/);
+  if (fileExtMatch) {
+    const fileExt = fileExtMatch[0];
+    // Create directory path matching URL structure
+    const dirPath = path.join(
+      getMockDir(ftmocksConifg),
+      `test_${nameToFolder(testName)}`,
+      "_files",
+      path.dirname(urlObj.pathname)
+    );
+
+    // Create directories if they don't exist
+    fs.mkdirSync(dirPath, { recursive: true });
+
+    // Save file with original name
+    const fileName = path.basename(urlObj.pathname);
+    const filePath = path.join(dirPath, fileName);
+
+    const response = await route.fetch();
+    const buffer = await response.body();
+    fs.writeFileSync(filePath, buffer);
+
+    await route.continue();
+    return true;
+  }
+  return false;
+};
+
+async function recordPlaywrightRoutes(
+  page,
+  ftmocksConifg,
+  config = {
+    testName,
+    mockPath: "**/*",
+    pattern: "^/api/.*",
+    avoidDuplicatesInTheTest: true,
+    avoidDuplicatesWithDefaultMocks: true,
+  }
+) {
+  await page.route(config.mockPath, async (route) => {
+    try {
+      const urlObj = new URL(route.request().url());
+      if (config.pattern && config.pattern.length > 0) {
+        const patternRegex = new RegExp(config.pattern);
+        if (!patternRegex.test(urlObj.pathname)) {
+          await route.continue();
+          return;
+        }
+      }
+
+      if (await saveIfItIsFile(route, config.testName, ftmocksConifg)) {
+        return;
+      }
+
+      const mockData = {
+        url: urlObj.pathname + urlObj.search,
+        time: new Date().toString(),
+        method: route.request().method(),
+        request: {
+          headers: await route.request().headers(),
+          queryString: Array.from(urlObj.searchParams.entries()).map(
+            ([name, value]) => ({
+              name,
+              value,
+            })
+          ),
+          postData: route.request().postData()
+            ? {
+                mimeType: "application/json",
+                text: route.request().postData(),
+              }
+            : null,
+        },
+        response: {
+          status: (await route.fetch()).status(),
+          headers: (await route.fetch()).headers(),
+          content: await (await route.fetch()).text(),
+        },
+        id: crypto.randomUUID(),
+        served: false,
+        ignoreParams: ftmocksConifg.ignoreParams || [],
+      };
+
+      await createTest(ftmocksConifg, config.testName);
+      if (config.avoidDuplicatesInTheTest) {
+        // Check if the mock data is a duplicate of a mock data in the test
+        const testMockList = loadMockDataFromConfig(
+          ftmocksConifg,
+          config.testName
+        );
+        const matchResponse = testMockList.find((mock) =>
+          compareMockToMock(mock.fileContent, mockData, true)
+        );
+        if (matchResponse) {
+          console.log("Aborting duplicate mock data in the test");
+          await route.continue();
+          return;
+        }
+      }
+
+      if (config.avoidDuplicatesWithDefaultMocks) {
+        // Check if the mock data is a duplicate of a mock data in the test
+        const defaultMockList = getDefaultMockDataFromConfig(ftmocksConifg);
+        const matchResponse = defaultMockList.find((mock) =>
+          compareMockToMock(mock.fileContent, mockData, true)
+        );
+        if (matchResponse) {
+          console.log("Aborting duplicate mock data with default mocks");
+          await route.continue();
+          return;
+        }
+      }
+
+      // Save the mock data to the test
+      const mockListPath = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(config.testName)}`,
+        "_mock_list.json"
+      );
+      let mockList = [];
+      if (fs.existsSync(mockListPath)) {
+        mockList = JSON.parse(fs.readFileSync(mockListPath, "utf8"));
+      }
+      mockList.push({
+        id: mockData.id,
+        url: mockData.url,
+        method: mockData.method,
+        time: mockData.time,
+      });
+
+      // Create test directory if it doesn't exist
+      const testDir = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(config.testName)}`
+      );
+      if (!fs.existsSync(testDir)) {
+        fs.mkdirSync(testDir, { recursive: true });
+      }
+      fs.writeFileSync(mockListPath, JSON.stringify(mockList, null, 2));
+      const mocDataPath = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(config.testName)}`,
+        `mock_${mockData.id}.json`
+      );
+      fs.writeFileSync(mocDataPath, JSON.stringify(mockData, null, 2));
+      await route.continue();
+    } catch (error) {
+      console.error(error);
+      await route.continue();
+    }
+  });
+}
+
 // Export functions as a module
 module.exports = {
   compareMockToRequest,
@@ -654,4 +899,5 @@ module.exports = {
   initiateConsoleLogs,
   initiatePlaywrightRoutes,
   initiateJestEventSnaps,
+  recordPlaywrightRoutes,
 };

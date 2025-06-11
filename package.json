@@ -1,6 +1,6 @@
 {
   "name": "ftmocks-utils",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "Util functions for FtMocks",
   "main": "src/index.js",
   "scripts": {
@@ -16,5 +16,9 @@
   "bugs": {
     "url": "https://github.com/SodhanaLibrary/ftmocks-utils/issues"
   },
-  "homepage": "https://github.com/SodhanaLibrary/ftmocks-utils#readme"
+  "homepage": "https://github.com/SodhanaLibrary/ftmocks-utils#readme",
+  "dependencies": {
+    "uui": "^1.0.7",
+    "uuid": "^11.1.0"
+  }
 }
