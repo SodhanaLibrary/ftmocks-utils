@@ -422,7 +422,7 @@ async function initiatePlaywrightRoutes(
     ? loadMockDataFromConfig(ftmocksConifg, testName)
     : [];
   resetAllMockStats({ testMockData, testConfig: ftmocksConifg, testName });
-  const test = await getTestByName(ftmocksConifg, config.testName);
+  const test = await getTestByName(ftmocksConifg, testName);
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
   console.debug("calling initiatePlaywrightRoutes fetch");
   await page.route(mockPath, async (route, request) => {
