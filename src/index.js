@@ -2,6 +2,23 @@ const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 
+function charDifference(str1, str2) {
+  let count1 = {},
+    count2 = {};
+
+  for (let ch of str1) count1[ch] = (count1[ch] || 0) + 1;
+  for (let ch of str2) count2[ch] = (count2[ch] || 0) + 1;
+
+  let diff = 0;
+  let chars = new Set([...Object.keys(count1), ...Object.keys(count2)]);
+
+  for (let ch of chars) {
+    diff += Math.abs((count1[ch] || 0) - (count2[ch] || 0));
+  }
+
+  return diff;
+}
+
 const nameToFolder = (name) => {
   return name.replaceAll(" ", "_");
 };
@@ -44,7 +61,7 @@ const getHeaders = (headers) => {
       ...Object.entries(capitalizeHeaders(headers)),
     ]);
   } catch (e) {
-    console.debug("error at getHeaders", e);
+    console.error("error at getHeaders", e);
     res = new Map([
       ["Content-Type", "application/json"],
       ["content-type", "application/json"],
@@ -102,7 +119,7 @@ const getDefaultMockDataFromConfig = (testConfig) => {
         const mockData = fs.readFileSync(mockFilePath, "utf8");
         entry.fileContent = JSON.parse(mockData);
       } catch (error) {
-        console.error(`Error reading mock data for ${entry.path}:`, error);
+        console.error(`Error reading mock data for ${entry.id}:`, error);
         return entry; // Return the original entry if there's an error
       }
     });
@@ -152,7 +169,7 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
 
     return mocks;
   } catch (error) {
-    console.debug("Error loading test data:", error.message);
+    console.error("Error loading test data:", error.message);
     return [];
   }
 };
@@ -186,6 +203,31 @@ const isSameRequest = (req1, req2) => {
     matched = false;
   }
   return matched;
+};
+
+const getSameRequestRank = (req1, req2) => {
+  let rank = 1;
+  clearNulls(req1.postData);
+  clearNulls(req2.postData);
+  // Compare path names
+  const url1 = new URL(`http://domain.com${req1.url}`);
+  const url2 = new URL(`http://domain.com${req2.url}`);
+  if (url1.pathname !== url2.pathname) {
+    rank = 0;
+  } else if (url1.method?.toLowerCase() !== url2.method?.toLowerCase()) {
+    rank = 0;
+  } else {
+    // Compare query strings
+    const queryDiff = charDifference(url1.search || "", url2.search || "");
+    rank = rank + queryDiff;
+    // Compare post data
+    const charDiff = charDifference(
+      JSON.stringify(req1.postData || {}),
+      JSON.stringify(req2.postData || {})
+    );
+    rank = rank + charDiff;
+  }
+  return rank;
 };
 
 const processURL = (url, ignoreParams = []) => {
@@ -242,8 +284,35 @@ function compareMockToFetchRequest(mock, fetchReq) {
       }
     );
   } catch (e) {
-    console.debug("error at compareMockToFetchRequest", mock, fetchReq);
-    console.debug(e);
+    console.error("error at compareMockToFetchRequest", mock, fetchReq);
+    console.error(e);
+  }
+  return false;
+}
+
+function getCompareRankMockToFetchRequest(mock, fetchReq) {
+  try {
+    const mockURL = processURL(
+      mock.fileContent.url,
+      mock.fileContent.ignoreParams
+    );
+    const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
+    const postData = mock.fileContent.request?.postData?.text
+      ? JSON.parse(mock.fileContent.request?.postData?.text)
+      : mock.fileContent.request?.postData;
+    return getSameRequestRank(
+      { url: mockURL, method: mock.fileContent.method, postData },
+      {
+        method: fetchReq.options.method || "GET",
+        postData: fetchReq.options.body?.length
+          ? JSON.parse(fetchReq.options.body)
+          : fetchReq.options.body,
+        url: reqURL,
+      }
+    );
+  } catch (e) {
+    console.error("error at getCompareRankMockToFetchRequest", mock, fetchReq);
+    console.error(e);
   }
   return false;
 }
@@ -255,6 +324,7 @@ function getMatchingMockData({
   options,
   testConfig,
   testName,
+  mode,
 }) {
   let served = false;
   let matchedMocks =
@@ -290,6 +360,38 @@ function getMatchingMockData({
       })
     );
   }
+
+  if (!foundMock && mode !== "strict") {
+    const mockRanks = {};
+    testMockData.forEach((tm) => {
+      const rank = getCompareRankMockToFetchRequest(tm, {
+        url,
+        options,
+      });
+      if (rank > 0) {
+        mockRanks[tm.id] = rank;
+      }
+    });
+    defaultMockData.forEach((tm) => {
+      const rank = getCompareRankMockToFetchRequest(tm, {
+        url,
+        options,
+      });
+      if (rank > 0) {
+        mockRanks[tm.id] = rank;
+      }
+    });
+    // Sort by rank to find the best match
+    const sortedRanks = Object.entries(mockRanks).sort((a, b) => a[1] - b[1]);
+    if (sortedRanks.length > 0) {
+      const bestMockId = sortedRanks?.[0]?.[0];
+      if (bestMockId) {
+        foundMock = [...testMockData, ...defaultMockData].find(
+          (mock) => mock.id === bestMockId
+        );
+      }
+    }
+  }
   return foundMock ? foundMock.fileContent : null;
 }
 
@@ -320,6 +422,7 @@ async function initiatePlaywrightRoutes(
     ? loadMockDataFromConfig(ftmocksConifg, testName)
     : [];
   resetAllMockStats({ testMockData, testConfig: ftmocksConifg, testName });
+  const test = await getTestByName(ftmocksConifg, config.testName);
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
   console.debug("calling initiatePlaywrightRoutes fetch");
   await page.route(mockPath, async (route, request) => {
@@ -346,6 +449,7 @@ async function initiatePlaywrightRoutes(
       options,
       testConfig: ftmocksConifg,
       testName,
+      mode: test.mode || "loose",
     });
     if (mockData) {
       console.debug("mocked", url, options);
@@ -635,6 +739,21 @@ function initiateJestEventSnaps(jest, ftmocksConifg, testName) {
   });
 }
 
+const getTestByName = async (ftmocksConifg, testName) => {
+  const testsPath = path.join(getMockDir(ftmocksConifg), "tests.json");
+  let tests = [];
+  try {
+    // Read existing tests
+    const testsData = fs.readFileSync(testsPath, "utf8");
+    tests = JSON.parse(testsData);
+    const etest = tests.find((tst) => tst.name === testName);
+    return etest;
+  } catch (error) {
+    console.error(`Error reading tests.json:`, error);
+    return null;
+  }
+};
+
 const createTest = async (ftmocksConifg, testName) => {
   const testsPath = path.join(getMockDir(ftmocksConifg), "tests.json");
   let tests = [];
@@ -763,8 +882,8 @@ async function recordPlaywrightRoutes(
     testName,
     mockPath: "**/*",
     pattern: "^/api/.*",
-    avoidDuplicatesInTheTest: true,
-    avoidDuplicatesWithDefaultMocks: true,
+    avoidDuplicatesInTheTest: false,
+    avoidDuplicatesWithDefaultMocks: false,
   }
 ) {
   await page.route(config.mockPath, async (route) => {
@@ -776,6 +895,11 @@ async function recordPlaywrightRoutes(
           await route.continue();
           return;
         }
+      }
+
+      const test = await getTestByName(ftmocksConifg, config.testName);
+      if (!test) {
+        await createTest(ftmocksConifg, config.testName);
       }
 
       if (await saveIfItIsFile(route, config.testName, ftmocksConifg)) {
@@ -883,6 +1007,7 @@ async function recordPlaywrightRoutes(
 
 // Export functions as a module
 module.exports = {
+  getTestByName,
   compareMockToRequest,
   processURL,
   isSameRequest,
