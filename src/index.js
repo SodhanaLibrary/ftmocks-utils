@@ -338,19 +338,6 @@ function getMatchingMockData({
   let foundMock = matchedMocks.find((mock) => !mock.fileContent.served)
     ? matchedMocks.find((mock) => !mock.fileContent.served)
     : matchedMocks[matchedMocks.length - 1];
-  // updating stats to mock file
-  if (foundMock) {
-    const mockFilePath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      `mock_${foundMock.id}.json`
-    );
-    foundMock.fileContent.served = true;
-    fs.writeFileSync(
-      mockFilePath,
-      JSON.stringify(foundMock.fileContent, null, 2)
-    );
-  }
 
   if (!foundMock) {
     foundMock = defaultMockData.find((tm) =>
@@ -391,6 +378,19 @@ function getMatchingMockData({
         );
       }
     }
+  }
+  // updating stats to mock file
+  if (foundMock) {
+    const mockFilePath = path.join(
+      getMockDir(testConfig),
+      `test_${nameToFolder(testName)}`,
+      `mock_${foundMock.id}.json`
+    );
+    foundMock.fileContent.served = true;
+    fs.writeFileSync(
+      mockFilePath,
+      JSON.stringify(foundMock.fileContent, null, 2)
+    );
   }
   return foundMock ? foundMock.fileContent : null;
 }
