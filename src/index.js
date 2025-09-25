@@ -424,9 +424,13 @@ async function initiatePlaywrightRoutes(
   resetAllMockStats({ testMockData, testConfig: ftmocksConifg, testName });
   const test = await getTestByName(ftmocksConifg, testName);
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
-  console.debug("calling initiatePlaywrightRoutes fetch");
+  console.debug("\x1b[32mcalling initiatePlaywrightRoutes fetch\x1b[0m");
+  let firstUrl = null;
   await page.route(mockPath, async (route, request) => {
     const url = request.url();
+    if (!firstUrl) {
+      firstUrl = url;
+    }
     const options = {
       url,
       method: request.method(),
@@ -436,12 +440,6 @@ async function initiatePlaywrightRoutes(
       await route.fallback();
       return;
     }
-    console.debug(
-      "got fetch request",
-      request.method(),
-      request.url(),
-      request.postData()
-    );
     let mockData = getMatchingMockData({
       testMockData,
       defaultMockData,
@@ -451,53 +449,140 @@ async function initiatePlaywrightRoutes(
       testName,
       mode: test.mode || "loose",
     });
-    if (mockData) {
-      console.debug("mocked", url, options);
-      const { content, headers, status } = mockData.response;
+    try {
+      if (mockData) {
+        const { content, headers, status, file } = mockData.response;
 
-      const json = {
-        status,
-        headers: getHeaders(headers),
-        body: content,
-      };
+        const json = {
+          status,
+          headers: getHeaders(headers),
+          body: content,
+        };
 
-      await route.fulfill(json);
-    } else {
-      console.debug("missing mock data", url, options);
-      const fallbackDir = getFallbackDir(ftmocksConifg);
-      if (!fallbackDir) {
-        await route.fallback();
-        return;
-      }
-      const urlObj = new URL(route.request().url());
-      const filePath = path.join(
-        fallbackDir,
-        urlObj.pathname === "/" || urlObj.pathname === ""
-          ? ftmocksConifg.FALLBACK_DIR_INDEX_FILE || "index.html"
-          : urlObj.pathname
-      );
-      console.debug("serving file ", filePath);
-      if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
-        const fileContent = fs.readFileSync(filePath);
-        const ext = path.extname(filePath);
-        const contentType =
-          {
-            ".html": "text/html",
-            ".css": "text/css",
-            ".js": "application/javascript",
-            ".json": "application/json",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-          }[ext] || "application/octet-stream";
+        if (file) {
+          const filePath = path.join(
+            getMockDir(ftmocksConifg),
+            `test_${nameToFolder(testName)}`,
+            "_files",
+            file
+          );
+          if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+            const fileContent = fs.readFileSync(filePath);
+            json.body = fileContent;
 
-        console.debug("serving file", filePath);
-        await route.fulfill({
-          body: fileContent,
-          headers: { "Content-Type": contentType },
-        });
+            console.debug(
+              "\x1b[32mresponse is a file, serving file\x1b[0m",
+              filePath,
+              url
+            );
+            await route.fulfill(json);
+          }
+        } else {
+          await route.fulfill(json);
+        }
       } else {
-        await route.fallback();
+        const fallbackDir = getFallbackDir(ftmocksConifg);
+        if (!fallbackDir) {
+          await route.fallback();
+          return;
+        }
+        const urlObj = new URL(route.request().url());
+        let filePath = path.join(
+          fallbackDir,
+          urlObj.pathname === "/" || urlObj.pathname === ""
+            ? ftmocksConifg.FALLBACK_DIR_INDEX_FILE || "index.html"
+            : urlObj.pathname
+        );
+
+        if (
+          !fs.existsSync(filePath) &&
+          !path.extname(filePath) &&
+          url === firstUrl
+        ) {
+          filePath = path.join(
+            fallbackDir,
+            ftmocksConifg.FALLBACK_DIR_INDEX_FILE_FOR_STATUS_404 || "index.html"
+          );
+          console.debug(
+            "\x1b[32mserving file for status 404\x1b[0m",
+            filePath,
+            url
+          );
+        }
+        if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+          const fileContent = fs.readFileSync(filePath);
+          const ext = path.extname(filePath);
+          const contentType =
+            {
+              ".html": "text/html",
+              ".htm": "text/html",
+              ".xhtml": "application/xhtml+xml",
+              ".css": "text/css",
+              ".js": "application/javascript",
+              ".json": "application/json",
+              ".png": "image/png",
+              ".jpg": "image/jpeg",
+              ".svg": "image/svg+xml",
+              ".ico": "image/x-icon",
+              ".webp": "image/webp",
+              ".mp4": "video/mp4",
+              ".mp3": "audio/mpeg",
+              ".wav": "audio/wav",
+              ".ogg": "audio/ogg",
+              ".pdf": "application/pdf",
+              ".doc": "application/msword",
+              ".docx":
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              ".xls": "application/vnd.ms-excel",
+              ".xlsx":
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              ".ppt": "application/vnd.ms-powerpoint",
+              ".pptx":
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+              ".zip": "application/zip",
+              ".rar": "application/x-rar-compressed",
+              ".7z": "application/x-7z-compressed",
+              ".tar": "application/x-tar",
+              ".gz": "application/gzip",
+              ".bz2": "application/x-bzip2",
+              ".xz": "application/x-xz",
+              ".exe": "application/x-msdownload",
+              ".dll": "application/x-msdownload",
+              ".so": "application/x-sharedlib",
+              ".dylib": "application/x-dynamiclib",
+              ".bin": "application/octet-stream",
+              ".txt": "text/plain",
+              ".csv": "text/csv",
+              ".tsv": "text/tab-separated-values",
+              ".xml": "application/xml",
+              ".xsl": "application/xml",
+              ".xslt": "application/xml",
+              ".xlt": "application/xml",
+              ".xltx": "application/xml",
+              ".xltm": "application/xml",
+              ".yaml": "text/yaml",
+              ".yml": "text/yaml",
+              ".toml": "text/toml",
+              ".php": "application/x-httpd-php",
+            }[ext] || "application/octet-stream";
+
+          console.debug("\x1b[32mserving file\x1b[0m", filePath);
+          await route.fulfill({
+            body: fileContent,
+            headers: { "Content-Type": contentType },
+          });
+        } else {
+          console.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
+          await route.fallback();
+        }
       }
+    } catch (e) {
+      console.error(e);
+      console.error(
+        "\x1b[31merror at initiatePlaywrightRoutes\x1b[0m",
+        url,
+        options
+      );
     }
   });
 }
@@ -749,7 +834,7 @@ const getTestByName = async (ftmocksConifg, testName) => {
     const etest = tests.find((tst) => tst.name === testName);
     return etest;
   } catch (error) {
-    console.error(`Error reading tests.json:`, error);
+    console.error(`\x1b[31mError reading tests.json:\x1b[0m`, error);
     return null;
   }
 };
@@ -776,13 +861,13 @@ const createTest = async (ftmocksConifg, testName) => {
       const mockListFilePath = path.join(folderPath, "_mock_list.json");
       fs.mkdir(folderPath, { recursive: true }, (err) => {
         if (err) {
-          console.error("Error creating directory:", err);
+          console.error("\x1b[31mError creating directory:\x1b[0m", err);
         } else {
-          console.log("Directory created successfully!");
+          console.log("\x1b[32mDirectory created successfully!\x1b[0m");
         }
       });
       await fs.appendFile(mockListFilePath, "[]", () => {
-        console.log("mock list file created successfully");
+        console.log("\x1b[32mmock list file created successfully\x1b[0m");
       });
 
       return newTest;
@@ -790,7 +875,7 @@ const createTest = async (ftmocksConifg, testName) => {
       throw "Test already exists";
     }
   } catch (error) {
-    console.error(`Error reading tests.json:`, error);
+    console.error(`\x1b[31mError reading tests.json:\x1b[0m`, error);
     return null;
   }
 };
