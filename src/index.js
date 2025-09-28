@@ -15,7 +15,11 @@ const {
 } = require("./common-utils");
 
 const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(getMockDir(testConfig), "default.json");
+  const defaultPath = path.join(
+    getMockDir(testConfig),
+    "defaultMocks",
+    "_mock_list.json"
+  );
 
   try {
     const defaultData = fs.readFileSync(defaultPath, "utf8");
@@ -38,7 +42,7 @@ const getDefaultMockDataFromConfig = (testConfig) => {
     });
     return parsedData;
   } catch (error) {
-    console.error(`Error reading or parsing default.json:`, error);
+    console.error(`Error reading or parsing default mocks:`, error);
     return [];
   }
 };
@@ -272,11 +276,18 @@ function getMatchingMockData({
   }
   // updating stats to mock file
   if (foundMock) {
-    const mockFilePath = path.join(
+    let mockFilePath = path.join(
       getMockDir(testConfig),
       `test_${nameToFolder(testName)}`,
       `mock_${foundMock.id}.json`
     );
+    if (!fs.existsSync(mockFilePath)) {
+      mockFilePath = path.join(
+        getMockDir(testConfig),
+        "defaultMocks",
+        `mock_${foundMock.id}.json`
+      );
+    }
     foundMock.fileContent.served = true;
     fs.writeFileSync(
       mockFilePath,
@@ -351,12 +362,20 @@ async function initiatePlaywrightRoutes(
         };
 
         if (file) {
-          const filePath = path.join(
+          let filePath = path.join(
             getMockDir(ftmocksConifg),
             `test_${nameToFolder(testName)}`,
             "_files",
             file
           );
+          if (!fs.existsSync(filePath)) {
+            filePath = path.join(
+              getMockDir(ftmocksConifg),
+              "defaultMocks",
+              "_files",
+              file
+            );
+          }
           if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
             const fileContent = fs.readFileSync(filePath);
             json.body = fileContent;
