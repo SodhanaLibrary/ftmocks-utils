@@ -6,13 +6,13 @@ const {
   nameToFolder,
   getMockDir,
   getFallbackDir,
-  areJsonEqual,
   clearNulls,
   processURL,
   getHeaders,
   countFilesInDirectory,
   getTestByName,
 } = require("./common-utils");
+const { FtJSON } = require("./json-utils");
 
 const getDefaultMockDataFromConfig = (testConfig) => {
   const defaultPath = path.join(
@@ -103,11 +103,11 @@ const isSameRequest = (req1, req2) => {
     (!req1.postData && req2.postData) ||
     (req1.postData && !req2.postData)
   ) {
-    matched = areJsonEqual(req1.postData || {}, req2.postData || {});
+    matched = FtJSON.areJsonEqual(req1.postData || {}, req2.postData || {});
   } else if (
     req1.postData &&
     req2.postData &&
-    !areJsonEqual(req1.postData, req2.postData)
+    !FtJSON.areJsonEqual(req1.postData, req2.postData)
   ) {
     matched = false;
   }
@@ -131,8 +131,8 @@ const getSameRequestRank = (req1, req2) => {
     rank = rank + queryDiff;
     // Compare post data
     const charDiff = charDifference(
-      JSON.stringify(req1.postData || {}),
-      JSON.stringify(req2.postData || {})
+      FtJSON.stringify(req1.postData || {}),
+      FtJSON.stringify(req2.postData || {})
     );
     rank = rank + charDiff;
   }
@@ -146,7 +146,7 @@ function compareMockToRequest(mock, req) {
   );
   const reqURL = processURL(req.originalUrl, mock.fileContent.ignoreParams);
   const postData = mock.fileContent.request?.postData?.text
-    ? JSON.parse(mock.fileContent.request?.postData?.text)
+    ? FtJSON.parse(mock.fileContent.request?.postData?.text)
     : mock.fileContent.request?.postData;
   return isSameRequest(
     { url: mockURL, method: mock.fileContent.method, postData },
@@ -166,14 +166,14 @@ function compareMockToFetchRequest(mock, fetchReq) {
     );
     const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
     const postData = mock.fileContent.request?.postData?.text
-      ? JSON.parse(mock.fileContent.request?.postData?.text)
+      ? FtJSON.parse(mock.fileContent.request?.postData?.text)
       : mock.fileContent.request?.postData;
     return isSameRequest(
       { url: mockURL, method: mock.fileContent.method, postData },
       {
         method: fetchReq.options.method || "GET",
         postData: fetchReq.options.body?.length
-          ? JSON.parse(fetchReq.options.body)
+          ? FtJSON.parse(fetchReq.options.body)
           : fetchReq.options.body,
         url: reqURL,
       }
@@ -193,14 +193,14 @@ function getCompareRankMockToFetchRequest(mock, fetchReq) {
     );
     const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
     const postData = mock.fileContent.request?.postData?.text
-      ? JSON.parse(mock.fileContent.request?.postData?.text)
+      ? FtJSON.parse(mock.fileContent.request?.postData?.text)
       : mock.fileContent.request?.postData;
     return getSameRequestRank(
       { url: mockURL, method: mock.fileContent.method, postData },
       {
         method: fetchReq.options.method || "GET",
         postData: fetchReq.options.body?.length
-          ? JSON.parse(fetchReq.options.body)
+          ? FtJSON.parse(fetchReq.options.body)
           : fetchReq.options.body,
         url: reqURL,
       }
@@ -530,7 +530,7 @@ async function initiateJestFetch(jest, ftmocksConifg, testName) {
     return Promise.resolve({
       status,
       headers: new Map(Object.entries(headers)),
-      json: () => Promise.resolve(JSON.parse(content)),
+      json: () => Promise.resolve(FtJSON.parse(content)),
     });
   });
 
@@ -767,17 +767,17 @@ const isSameResponse = (req1, req2) => {
       (!req1.response.content && req2.response.content) ||
       (req1.response.content && !req2.response.content)
     ) {
-      matched = areJsonEqual(
-        JSON.parse(req1.response.content) || {},
-        JSON.parse(req2.response.content) || {}
+      matched = FtJSON.areJsonEqual(
+        FtJSON.parse(req1.response.content) || {},
+        FtJSON.parse(req2.response.content) || {}
       );
       // console.log('not matched at post Data 0', req1.postData, req2.postData);
     } else if (
       req1.response.content &&
       req2.response.content &&
-      !areJsonEqual(
-        JSON.parse(req1.response.content) || {},
-        JSON.parse(req2.response.content) || {}
+      !FtJSON.areJsonEqual(
+        FtJSON.parse(req1.response.content) || {},
+        FtJSON.parse(req2.response.content) || {}
       )
     ) {
       matched = false;

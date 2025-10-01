@@ -1,21 +1,31 @@
 const path = require("path");
 const fs = require("fs");
+const { FtJSON } = require("./json-utils");
 
 const charDifference = (str1, str2) => {
-  let count1 = {},
-    count2 = {};
+  if (str1 && str2) {
+    let count1 = {};
+    let count2 = {};
 
-  for (let ch of str1) count1[ch] = (count1[ch] || 0) + 1;
-  for (let ch of str2) count2[ch] = (count2[ch] || 0) + 1;
+    for (let ch of str1) count1[ch] = (count1[ch] || 0) + 1;
+    for (let ch of str2) count2[ch] = (count2[ch] || 0) + 1;
 
-  let diff = 0;
-  let chars = new Set([...Object.keys(count1), ...Object.keys(count2)]);
+    let diff = 0;
+    let chars = new Set([...Object.keys(count1), ...Object.keys(count2)]);
 
-  for (let ch of chars) {
-    diff += Math.abs((count1[ch] || 0) - (count2[ch] || 0));
+    for (let ch of chars) {
+      diff += Math.abs((count1[ch] || 0) - (count2[ch] || 0));
+    }
+
+    return diff;
+  } else {
+    if (!str1 && str2) {
+      return str2.length;
+    } else if (str1 && !str2) {
+      return str1.length;
+    }
+    return 0;
   }
-
-  return diff;
 };
 
 const nameToFolder = (name) => {
@@ -50,37 +60,6 @@ const capitalizeHeaders = (headers) => {
       value,
     ])
   );
-};
-
-const areJsonEqual = (jsonObj1, jsonObj2) => {
-  // Check if both are objects and not null
-  if (
-    typeof jsonObj1 === "object" &&
-    jsonObj1 !== null &&
-    typeof jsonObj2 === "object" &&
-    jsonObj2 !== null
-  ) {
-    // Get the keys of both objects
-    const keys1 = Object.keys(jsonObj1);
-    const keys2 = Object.keys(jsonObj2);
-
-    // Check if the number of keys is different
-    if (keys1.length !== keys2.length) {
-      return false;
-    }
-
-    // Recursively check each key-value pair
-    for (let key of keys1) {
-      if (!keys2.includes(key) || !areJsonEqual(jsonObj1[key], jsonObj2[key])) {
-        return false;
-      }
-    }
-
-    return true;
-  } else {
-    // For non-object types, use strict equality comparison
-    return jsonObj1 === jsonObj2;
-  }
 };
 
 const clearNulls = (postData) => {
@@ -162,7 +141,6 @@ module.exports = {
   getFallbackDir,
   capitalizeHeader,
   capitalizeHeaders,
-  areJsonEqual,
   clearNulls,
   processURL,
   getHeaders,
