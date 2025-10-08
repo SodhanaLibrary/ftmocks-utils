@@ -13,6 +13,9 @@ const {
   getTestByName,
 } = require("./common-utils");
 const { FtJSON } = require("./json-utils");
+const Logger = require("./log-utils");
+
+let logger = null;
 
 const getDefaultMockDataFromConfig = (testConfig) => {
   const defaultPath = path.join(
@@ -320,13 +323,14 @@ async function initiatePlaywrightRoutes(
   mockPath = "**/*",
   excludeMockPath = null
 ) {
+  logger = new Logger({disableLogs: ftmocksConifg.DISABLE_LOGS}, ftmocksConifg, testName);
   const testMockData = testName
     ? loadMockDataFromConfig(ftmocksConifg, testName)
     : [];
   resetAllMockStats({ testMockData, testConfig: ftmocksConifg, testName });
   const test = await getTestByName(ftmocksConifg, testName);
   const defaultMockData = getDefaultMockDataFromConfig(ftmocksConifg);
-  console.debug("\x1b[32mcalling initiatePlaywrightRoutes fetch\x1b[0m");
+  logger.debug("\x1b[32mcalling initiatePlaywrightRoutes fetch\x1b[0m");
   let firstUrl = null;
   await page.route(mockPath, async (route, request) => {
     const url = request.url();
@@ -413,7 +417,7 @@ async function initiatePlaywrightRoutes(
             fallbackDir,
             ftmocksConifg.FALLBACK_DIR_INDEX_FILE_FOR_STATUS_404 || "index.html"
           );
-          console.debug(
+          logger.debug(
             "\x1b[32mserving file for status 404\x1b[0m",
             filePath,
             url
@@ -476,19 +480,19 @@ async function initiatePlaywrightRoutes(
               ".php": "application/x-httpd-php",
             }[ext] || "application/octet-stream";
 
-          console.debug("\x1b[32mserving file\x1b[0m", filePath);
+          logger.info("\x1b[32mserving file\x1b[0m", filePath);
           await route.fulfill({
             body: fileContent,
             headers: { "Content-Type": contentType },
           });
         } else {
-          console.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
+          logger.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
           await route.fallback();
         }
       }
     } catch (e) {
-      console.error(e);
-      console.error(
+      logger.error(e);
+      logger.error(
         "\x1b[31merror at initiatePlaywrightRoutes\x1b[0m",
         url,
         options
