@@ -12,209 +12,25 @@ const {
   countFilesInDirectory,
   getTestByName,
 } = require("./common-utils");
+const {
+  getDefaultMockDataFromConfig,
+  loadMockDataFromConfig,
+  resetAllMockStats,
+} = require("./mock-utils");
+const { createTest } = require("./test-utils");
 const { FtJSON } = require("./json-utils");
-const Logger = require("./log-utils");
+const { Logger, deleteAllLogs } = require("./log-utils");
+const {
+  isSameRequest,
+  compareMockToRequest,
+  compareMockToFetchRequest,
+  compareMockToMock,
+} = require("./compare-utils");
+const { getCompareRankMockToFetchRequest } = require("./rank-compare-utils");
 
 let logger = null;
 
-const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(
-    getMockDir(testConfig),
-    "defaultMocks",
-    "_mock_list.json"
-  );
-
-  try {
-    const defaultData = fs.readFileSync(defaultPath, "utf8");
-    let parsedData = JSON.parse(defaultData);
-
-    // Read and attach mock data for each entry in parsedData
-    parsedData.forEach((entry) => {
-      const mockFilePath = path.join(
-        getMockDir(testConfig),
-        "defaultMocks",
-        `mock_${entry.id}.json`
-      );
-      try {
-        const mockData = fs.readFileSync(mockFilePath, "utf8");
-        entry.fileContent = JSON.parse(mockData);
-      } catch (error) {
-        console.error(`Error reading mock data for ${entry.id}:`, error);
-        return entry; // Return the original entry if there's an error
-      }
-    });
-    return parsedData;
-  } catch (error) {
-    console.error(`Error reading or parsing default mocks:`, error);
-    return [];
-  }
-};
-
 // src/index.js
-const loadMockDataFromConfig = (testConfig, _testName) => {
-  try {
-    let testName = _testName;
-    if (!testName) {
-      // Read the test ID from mockServer.config.json
-      const configPath = path.join(
-        getMockDir(testConfig),
-        "mockServer.config.json"
-      );
-      const configData = fs.readFileSync(configPath, "utf8");
-      const config = JSON.parse(configData);
-      testName = config.testName;
-    }
-    // Read the tests from testConfig
-    const mocksPath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      "_mock_list.json"
-    );
-    const mocksData = fs.readFileSync(mocksPath, "utf8");
-    const mocks = JSON.parse(mocksData);
-
-    mocks.forEach((mock) => {
-      const fileContent = JSON.parse(
-        fs.readFileSync(
-          path.join(
-            getMockDir(testConfig),
-            `test_${nameToFolder(testName)}`,
-            `mock_${mock.id}.json`
-          ),
-          "utf8"
-        )
-      );
-      mock.fileContent = fileContent;
-    });
-
-    return mocks;
-  } catch (error) {
-    console.error("Error loading test data:", error.message);
-    return [];
-  }
-};
-
-const isSameRequest = (req1, req2) => {
-  clearNulls(req1.postData);
-  clearNulls(req2.postData);
-  let matched = true;
-  if (req1.url !== req2.url) {
-    matched = false;
-  } else if (req1.method?.toLowerCase() !== req2.method?.toLowerCase()) {
-    matched = false;
-  } else if (
-    (!req1.postData && req2.postData) ||
-    (req1.postData && !req2.postData)
-  ) {
-    matched = FtJSON.areJsonEqual(req1.postData || {}, req2.postData || {});
-  } else if (
-    req1.postData &&
-    req2.postData &&
-    !FtJSON.areJsonEqual(req1.postData, req2.postData)
-  ) {
-    matched = false;
-  }
-  return matched;
-};
-
-const getSameRequestRank = (req1, req2) => {
-  let rank = 1;
-  clearNulls(req1.postData);
-  clearNulls(req2.postData);
-  // Compare path names
-  const url1 = new URL(`http://domain.com${req1.url}`);
-  const url2 = new URL(`http://domain.com${req2.url}`);
-  if (url1.pathname !== url2.pathname) {
-    rank = 0;
-  } else if (url1.method?.toLowerCase() !== url2.method?.toLowerCase()) {
-    rank = 0;
-  } else {
-    // Compare query strings
-    const queryDiff = charDifference(url1.search || "", url2.search || "");
-    rank = rank + queryDiff;
-    // Compare post data
-    const charDiff = charDifference(
-      FtJSON.stringify(req1.postData || {}),
-      FtJSON.stringify(req2.postData || {})
-    );
-    rank = rank + charDiff;
-  }
-  return rank;
-};
-
-function compareMockToRequest(mock, req) {
-  const mockURL = processURL(
-    mock.fileContent.url,
-    mock.fileContent.ignoreParams
-  );
-  const reqURL = processURL(req.originalUrl, mock.fileContent.ignoreParams);
-  const postData = mock.fileContent.request?.postData?.text
-    ? FtJSON.parse(mock.fileContent.request?.postData?.text)
-    : mock.fileContent.request?.postData;
-  return isSameRequest(
-    { url: mockURL, method: mock.fileContent.method, postData },
-    {
-      method: req.method,
-      postData: req.body,
-      url: reqURL,
-    }
-  );
-}
-
-function compareMockToFetchRequest(mock, fetchReq) {
-  try {
-    const mockURL = processURL(
-      mock.fileContent.url,
-      mock.fileContent.ignoreParams
-    );
-    const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
-    const postData = mock.fileContent.request?.postData?.text
-      ? FtJSON.parse(mock.fileContent.request?.postData?.text)
-      : mock.fileContent.request?.postData;
-    return isSameRequest(
-      { url: mockURL, method: mock.fileContent.method, postData },
-      {
-        method: fetchReq.options.method || "GET",
-        postData: fetchReq.options.body?.length
-          ? FtJSON.parse(fetchReq.options.body)
-          : fetchReq.options.body,
-        url: reqURL,
-      }
-    );
-  } catch (e) {
-    console.error("error at compareMockToFetchRequest", mock, fetchReq);
-    console.error(e);
-  }
-  return false;
-}
-
-function getCompareRankMockToFetchRequest(mock, fetchReq) {
-  try {
-    const mockURL = processURL(
-      mock.fileContent.url,
-      mock.fileContent.ignoreParams
-    );
-    const reqURL = processURL(fetchReq.url, mock.fileContent.ignoreParams);
-    const postData = mock.fileContent.request?.postData?.text
-      ? FtJSON.parse(mock.fileContent.request?.postData?.text)
-      : mock.fileContent.request?.postData;
-    return getSameRequestRank(
-      { url: mockURL, method: mock.fileContent.method, postData },
-      {
-        method: fetchReq.options.method || "GET",
-        postData: fetchReq.options.body?.length
-          ? FtJSON.parse(fetchReq.options.body)
-          : fetchReq.options.body,
-        url: reqURL,
-      }
-    );
-  } catch (e) {
-    console.error("error at getCompareRankMockToFetchRequest", mock, fetchReq);
-    console.error(e);
-  }
-  return false;
-}
-
 function getMatchingMockData({
   testMockData,
   defaultMockData,
@@ -300,22 +116,6 @@ function getMatchingMockData({
   return foundMock ? foundMock.fileContent : null;
 }
 
-async function resetAllMockStats({ testMockData, testConfig, testName }) {
-  for (let i = 0; i < testMockData.length; i++) {
-    const tmd = testMockData[i];
-    const mockFilePath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      `mock_${tmd.id}.json`
-    );
-    tmd.fileContent.served = false;
-    await fs.writeFileSync(
-      mockFilePath,
-      JSON.stringify(tmd.fileContent, null, 2)
-    );
-  }
-}
-
 async function initiatePlaywrightRoutes(
   page,
   ftmocksConifg,
@@ -323,7 +123,11 @@ async function initiatePlaywrightRoutes(
   mockPath = "**/*",
   excludeMockPath = null
 ) {
-  logger = new Logger({disableLogs: ftmocksConifg.DISABLE_LOGS}, ftmocksConifg, testName);
+  logger = new Logger(
+    { disableLogs: ftmocksConifg.DISABLE_LOGS },
+    ftmocksConifg,
+    testName
+  );
   const testMockData = testName
     ? loadMockDataFromConfig(ftmocksConifg, testName)
     : [];
@@ -692,15 +496,6 @@ const deleteAllSnaps = async (ftmocksConifg, testName) => {
   fs.rmSync(snapFolder, { recursive: true, force: true });
 };
 
-const deleteAllLogs = async (ftmocksConifg, testName) => {
-  const mockDir = path.join(
-    getMockDir(ftmocksConifg),
-    `test_${nameToFolder(testName)}`
-  );
-  const logFilePath = path.join(mockDir, `_logs.json`);
-  fs.rmSync(logFilePath, { recursive: true, force: true });
-};
-
 function initiateJestEventSnaps(jest, ftmocksConifg, testName) {
   const mouseEvents = ftmocksConifg.snapEvents || [
     "click",
@@ -719,95 +514,6 @@ function initiateJestEventSnaps(jest, ftmocksConifg, testName) {
       });
   });
 }
-
-const createTest = async (ftmocksConifg, testName) => {
-  const testsPath = path.join(getMockDir(ftmocksConifg), "tests.json");
-  let tests = [];
-  try {
-    // Read existing tests
-    const testsData = fs.readFileSync(testsPath, "utf8");
-    tests = JSON.parse(testsData);
-    const etest = tests.find((tst) => tst.name === testName);
-    if (!etest) {
-      const newTest = {
-        id: uuidv4(),
-        name: testName,
-      };
-      tests.push(newTest);
-      fs.writeFileSync(testsPath, JSON.stringify(tests, null, 2));
-      const folderPath = path.join(
-        getMockDir(ftmocksConifg),
-        `test_${nameToFolder(testName)}`
-      );
-      const mockListFilePath = path.join(folderPath, "_mock_list.json");
-      fs.mkdir(folderPath, { recursive: true }, (err) => {
-        if (err) {
-          console.error("\x1b[31mError creating directory:\x1b[0m", err);
-        } else {
-          console.log("\x1b[32mDirectory created successfully!\x1b[0m");
-        }
-      });
-      await fs.appendFile(mockListFilePath, "[]", () => {
-        console.log("\x1b[32mmock list file created successfully\x1b[0m");
-      });
-
-      return newTest;
-    } else {
-      throw "Test already exists";
-    }
-  } catch (error) {
-    console.error(`\x1b[31mError reading tests.json:\x1b[0m`, error);
-    return null;
-  }
-};
-
-const isSameResponse = (req1, req2) => {
-  try {
-    let matched = true;
-    if (req1.response.status !== req2.response.status) {
-      matched = false;
-      // console.log('not matched at url', req1.method, req2.method);
-    } else if (
-      (!req1.response.content && req2.response.content) ||
-      (req1.response.content && !req2.response.content)
-    ) {
-      matched = FtJSON.areJsonEqual(
-        FtJSON.parse(req1.response.content) || {},
-        FtJSON.parse(req2.response.content) || {}
-      );
-      // console.log('not matched at post Data 0', req1.postData, req2.postData);
-    } else if (
-      req1.response.content &&
-      req2.response.content &&
-      !FtJSON.areJsonEqual(
-        FtJSON.parse(req1.response.content) || {},
-        FtJSON.parse(req2.response.content) || {}
-      )
-    ) {
-      matched = false;
-    }
-    // if (matched) {
-    //   console.log('matched responses', req1, req2);
-    // }
-    return matched;
-  } catch (error) {
-    console.error(error);
-    return false;
-  }
-};
-
-const compareMockToMock = (mock1, mock2, matchResponse) => {
-  try {
-    if (matchResponse) {
-      return isSameRequest(mock1, mock2) && isSameResponse(mock1, mock2);
-    } else {
-      return isSameRequest(mock1, mock2);
-    }
-  } catch (error) {
-    console.error(error);
-    return false;
-  }
-};
 
 const saveIfItIsFile = async (route, testName, ftmocksConifg) => {
   const urlObj = new URL(route.request().url());

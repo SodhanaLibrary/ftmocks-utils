@@ -30,7 +30,11 @@ class Logger {
         time: Date.now(),
         source: "ftmocks-utils",
       });
-      fs.writeFileSync(this.logsFile, JSON.stringify(this.logs, null, 2), "utf8"); // Append the log message to the file
+      fs.writeFileSync(
+        this.logsFile,
+        JSON.stringify(this.logs, null, 2),
+        "utf8"
+      ); // Append the log message to the file
     } catch (error) {
       // Ignore error
     }
@@ -87,4 +91,13 @@ class Logger {
   }
 }
 
-module.exports = Logger;
+const deleteAllLogs = async (ftmocksConifg, testName) => {
+  const mockDir = path.join(
+    getMockDir(ftmocksConifg),
+    `test_${nameToFolder(testName)}`
+  );
+  const logFilePath = path.join(mockDir, `_logs.json`);
+  fs.rmSync(logFilePath, { recursive: true, force: true });
+};
+
+module.exports = { Logger, deleteAllLogs };
