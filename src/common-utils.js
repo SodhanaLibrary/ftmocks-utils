@@ -134,6 +134,82 @@ const getTestByName = async (ftmocksConifg, testName) => {
   }
 };
 
+/**
+ * Creates a map from an array of objects using `id` property as key.
+ * @param {Array<object>} arr - The array of objects to map.
+ * @returns {Object} Map of id -> object
+ */
+function createIdMap(arr) {
+  if (!Array.isArray(arr)) return {};
+  return arr.reduce((acc, obj) => {
+    if (obj && obj.id !== undefined && obj.id !== null) {
+      acc[obj.id] = obj;
+    }
+    return acc;
+  }, {});
+}
+
+/**
+ * Creates a map where the key is in the format '[method]-[pathname]' and the value is the mock's id.
+ * @param {Array<object>} mocks - Array of mock objects. Each should have fileContent with method and url, and an id.
+ * @returns {Object} Map of '[method]-[pathname]' -> mock.id
+ */
+function createMethodPathnameIdMap(mocks) {
+  if (!Array.isArray(mocks)) return {};
+  const map = {};
+  for (const mock of mocks) {
+    if (
+      mock &&
+      mock.id !== undefined &&
+      mock.fileContent &&
+      typeof mock.fileContent.method === "string" &&
+      typeof mock.fileContent.url === "string"
+    ) {
+      const urlObj = (() => {
+        try {
+          return new URL(mock.fileContent.url, "http://localhost");
+        } catch (e) {
+          // fallback: treat as path only
+          return { pathname: mock.fileContent.url };
+        }
+      })();
+      const key = `${mock.fileContent.method.toUpperCase()}-${urlObj.pathname}`;
+      if (!map[key]) {
+        map[key] = [mock.id];
+      } else {
+        map[key].push(mock.id);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Returns a unique key for the given mock in the format '[METHOD]-[pathname]'.
+ * If the URL can't be parsed, uses the raw URL as pathname.
+ * @param {object} mock - The mock object with at least fileContent.method and fileContent.url
+ * @returns {string|null} The key as '[METHOD]-[pathname]', or null if invalid input
+ */
+function getMockKey(options) {
+  if (
+    !options ||
+    !options.method ||
+    !options.url ||
+    typeof options.method !== "string" ||
+    typeof options.url !== "string"
+  ) {
+    return null;
+  }
+  let pathname;
+  try {
+    const urlObj = new URL(options.url, "http://localhost");
+    pathname = urlObj.pathname;
+  } catch (_) {
+    pathname = options.url;
+  }
+  return `${options.method.toUpperCase()}-${pathname}`;
+}
+
 module.exports = {
   charDifference,
   nameToFolder,
@@ -146,4 +222,7 @@ module.exports = {
   getHeaders,
   countFilesInDirectory,
   getTestByName,
+  createIdMap,
+  createMethodPathnameIdMap,
+  getMockKey,
 };
