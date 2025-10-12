@@ -14,6 +14,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 
 let logger = null;
+const DEFAULT_EXCLUDED_HEADERS =
+  "cookie,set-cookie,authorization,www-authenticate";
 
 async function initiatePlaywrightRoutes(
   page,
@@ -204,6 +206,22 @@ async function initiatePlaywrightRoutes(
   });
 }
 
+const excludeHeaders = (headers, ftmocksConifg) => {
+  const excludedHeaders =
+    ftmocksConifg.EXCLUDED_HEADERS || DEFAULT_EXCLUDED_HEADERS;
+  if (!excludedHeaders) {
+    return headers;
+  }
+  excludedHeaders.split(",").forEach((header) => {
+    Object.keys(headers).forEach((key) => {
+      if (key.toLowerCase() === header.toLowerCase()) {
+        delete headers[key];
+      }
+    });
+  });
+  return headers;
+};
+
 async function recordPlaywrightRoutes(
   page,
   ftmocksConifg,
@@ -231,16 +249,21 @@ async function recordPlaywrightRoutes(
         await createTest(ftmocksConifg, config.testName);
       }
 
-      if (await saveIfItIsFile(route, config.testName, ftmocksConifg)) {
-        return;
-      }
+      const fileName = await saveIfItIsFile(
+        route,
+        config.testName,
+        ftmocksConifg
+      );
 
       const mockData = {
         url: urlObj.pathname + urlObj.search,
         time: new Date().toString(),
         method: route.request().method(),
         request: {
-          headers: await route.request().headers(),
+          headers: excludeHeaders(
+            await route.request().headers(),
+            ftmocksConifg
+          ),
           queryString: Array.from(urlObj.searchParams.entries()).map(
             ([name, value]) => ({
               name,
@@ -255,9 +278,10 @@ async function recordPlaywrightRoutes(
             : null,
         },
         response: {
+          file: fileName,
           status: (await route.fetch()).status(),
           headers: (await route.fetch()).headers(),
-          content: await (await route.fetch()).text(),
+          content: fileName ? null : await (await route.fetch()).text(),
         },
         id: crypto.randomUUID(),
         served: false,
