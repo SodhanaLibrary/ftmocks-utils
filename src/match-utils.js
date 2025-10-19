@@ -1,6 +1,12 @@
 const { compareMockToFetchRequest } = require("./compare-utils");
 const { getCompareRankMockToFetchRequest } = require("./rank-compare-utils");
-const { getMockDir, nameToFolder } = require("./common-utils");
+const {
+  getMockDir,
+  nameToFolder,
+  createIdMap,
+  createMethodPathnameIdMap,
+  getMockKey,
+} = require("./common-utils");
 const path = require("path");
 const fs = require("fs");
 
@@ -14,10 +20,22 @@ function getMatchingMockData({
   mode,
 }) {
   let served = false;
+  const testMockIdMap = createIdMap(testMockData);
   let matchedMocks =
     testMockData?.filter((mock) => {
       if (mock.fileContent.waitForPrevious && !served) {
         return false;
+      }
+      if (mock.fileContent.waitFor) {
+        const waitForMocks = mock.fileContent.waitFor.filter(
+          (waitForMockId) => {
+            const waitForMock = testMockIdMap[waitForMockId];
+            return waitForMock && !waitForMock.fileContent.served;
+          }
+        );
+        if (waitForMocks.length > 0) {
+          return false;
+        }
       }
       served = mock.fileContent.served;
       return compareMockToFetchRequest(mock, { url, options });
