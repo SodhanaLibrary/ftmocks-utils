@@ -234,8 +234,10 @@ async function recordPlaywrightRoutes(
   }
 ) {
   await page.route(config.mockPath, async (route) => {
+    const currentRequest = route.request();
+    let response = null;
     try {
-      const urlObj = new URL(route.request().url());
+      const urlObj = new URL(currentRequest.url());
       if (config.pattern && config.pattern.length > 0) {
         const patternRegex = new RegExp(config.pattern);
         if (!patternRegex.test(urlObj.pathname)) {
@@ -249,8 +251,11 @@ async function recordPlaywrightRoutes(
         await createTest(ftmocksConifg, config.testName);
       }
 
+      response = await route.fetch();
+
       const fileName = await saveIfItIsFile(
-        route,
+        currentRequest,
+        response,
         config.testName,
         ftmocksConifg
       );
@@ -258,10 +263,10 @@ async function recordPlaywrightRoutes(
       const mockData = {
         url: urlObj.pathname + urlObj.search,
         time: new Date().toString(),
-        method: route.request().method(),
+        method: currentRequest.method(),
         request: {
           headers: excludeHeaders(
-            await route.request().headers(),
+            await currentRequest.headers(),
             ftmocksConifg
           ),
           queryString: Array.from(urlObj.searchParams.entries()).map(
@@ -270,18 +275,18 @@ async function recordPlaywrightRoutes(
               value,
             })
           ),
-          postData: route.request().postData()
+          postData: currentRequest.postData()
             ? {
                 mimeType: "application/json",
-                text: route.request().postData(),
+                text: currentRequest.postData(),
               }
             : null,
         },
         response: {
           file: fileName,
-          status: (await route.fetch()).status(),
-          headers: (await route.fetch()).headers(),
-          content: fileName ? null : await (await route.fetch()).text(),
+          status: response.status(),
+          headers: response.headers(),
+          content: fileName ? null : await response.text(),
         },
         id: crypto.randomUUID(),
         served: false,
@@ -350,10 +355,22 @@ async function recordPlaywrightRoutes(
         `mock_${mockData.id}.json`
       );
       fs.writeFileSync(mocDataPath, JSON.stringify(mockData, null, 2));
-      await route.continue();
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: await response.body(),
+      });
     } catch (error) {
       console.error(error);
-      await route.continue();
+      if (!response) {
+        await route.continue();
+      } else {
+        await route.fulfill({
+          status: response.status(),
+          headers: response.headers(),
+          body: await response.body(),
+        });
+      }
     }
   });
 }
