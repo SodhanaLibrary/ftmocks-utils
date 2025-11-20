@@ -24,8 +24,31 @@ const injectEventRecordingScript = async (
       fs.writeFileSync(eventsFile, JSON.stringify([], null, 2));
     }
 
+    const takeScreenshot = async (imgOptions) => {
+      if (!ftmocksConifg.recordScreenshots) {
+        return;
+      }
+      const screenshot = await page.screenshot({ fullPage: false });
+      const screenshotsDir = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(testName)}`,
+        "screenshots"
+      );
+      if (!fs.existsSync(screenshotsDir)) {
+        fs.mkdirSync(screenshotsDir, { recursive: true });
+      }
+      const screenshotFile = path.join(
+        getMockDir(ftmocksConifg),
+        `test_${nameToFolder(testName)}`,
+        "screenshots",
+        `screenshot_${imgOptions.name}.png`
+      );
+      fs.writeFileSync(screenshotFile, screenshot);
+      return screenshotFile;
+    };
+
     // Expose a function to receive click info from the browser
-    await page.exposeFunction("saveEventForTest", (event) => {
+    await page.exposeFunction("saveEventForTest", async (event) => {
       event.id = crypto.randomUUID();
       if (!fs.existsSync(eventsFile)) {
         // Ensure the directory exists before writing the eventsFile
@@ -41,8 +64,10 @@ const injectEventRecordingScript = async (
         events[events.length - 1]?.type === "input"
       ) {
         events[events.length - 1].value = event.value;
+        await takeScreenshot({ name: events[events.length - 1].id });
       } else {
         events.push(event);
+        await takeScreenshot({ name: event.id });
       }
       fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
     });
@@ -399,25 +424,30 @@ const injectEventRecordingScript = async (
               ),
             });
           }
-          const escapedText = element.textContent.replace(/"/g, '\\"');
+          const escapedText = element.textContent
+            .replace(/'/g, "\\'")
+            .replace(/\s+/g, " ")
+            .trim();
           if (element.role && element.textContent) {
             selectors.push({
               type: "locator",
-              value: `${tagName}[role='${element.role}'][contains(text(), '${escapedText}')]`,
-              nth: getUniqueElementSelectorNth(
-                `${tagName}[role='${element.role}'][contains(text(), '${escapedText}')]`,
+              value: getUniqueXpath(
+                `//${tagName}[@role='${element.role}' and normalize-space(.) = '${escapedText}']`,
                 element
               ),
             });
           }
-          if (event?.target?.textContent?.length > 0) {
+          if (
+            event?.target?.textContent?.length > 0 &&
+            event?.target?.textContent?.length < 200
+          ) {
             selectors.push({
               type: "locator",
               value: getUniqueXpath(
-                `//*[contains(text(), '${event.target.textContent.replace(
-                  /"/g,
-                  '\\"'
-                )}')]`,
+                `//*[normalize-space(.)='${event.target.textContent
+                  .replace(/'/g, "\\'")
+                  .replace(/\s+/g, " ")
+                  .trim()}']`,
                 event.target
               ),
             });
@@ -590,7 +620,7 @@ const injectEventRecordingScript = async (
         return {
           tagName: target.tagName,
           textContent:
-            target.textContent?.length > 0 && target.textContent?.length < 100
+            target.textContent?.length > 0 && target.textContent?.length < 200
               ? target.textContent
               : null,
           id: target.id,
