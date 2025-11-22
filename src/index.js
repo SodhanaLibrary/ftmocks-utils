@@ -22,6 +22,11 @@ const {
 } = require("./playwright-utils");
 const { saveSnap, deleteAllSnaps } = require("./snap-utils");
 const { injectEventRecordingScript } = require("./event-utils");
+const {
+  runEventsForTest,
+  runEvent,
+  runEventsInPresentationMode,
+} = require("./event-run-utils");
 
 // Export functions as a module
 module.exports = {
@@ -44,4 +49,7 @@ module.exports = {
   initiateJestEventSnaps,
   recordPlaywrightRoutes,
   injectEventRecordingScript,
+  runEventsForTest,
+  runEvent,
+  runEventsInPresentationMode,
 };
