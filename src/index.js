@@ -26,6 +26,7 @@ const {
   runEventsForTest,
   runEvent,
   runEventsInPresentationMode,
+  runEventsInTrainingMode,
 } = require("./event-run-utils");
 
 // Export functions as a module
@@ -52,4 +53,5 @@ module.exports = {
   runEventsForTest,
   runEvent,
   runEventsInPresentationMode,
+  runEventsInTrainingMode,
 };

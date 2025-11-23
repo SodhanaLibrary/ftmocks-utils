@@ -79,6 +79,42 @@ const runEvent = async (page, event, delay = 0) => {
   }
 };
 
+const isValidEvent = (event) => {
+  try {
+    console.log("➡ Validating event", event);
+    switch (event?.type) {
+      case "url":
+        return true;
+      case "click":
+        return true;
+      case "input":
+        return true;
+      case "keypress":
+        return true;
+      case "change":
+        return true;
+      case "dblclick":
+        return true;
+      case "contextmenu":
+        return true;
+      case "hover":
+        return true;
+      case "keydown":
+        return true;
+      case "keyup":
+        return true;
+      default:
+        return false;
+    }
+  } catch (error) {
+    console.error("Error running event", {
+      error: error.message,
+      stack: error.stack,
+    });
+  }
+  return false;
+};
+
 const runEvents = async (page, events, delay = 1000) => {
   for (const event of events) {
     await runEvent(page, event, delay);
@@ -93,6 +129,13 @@ const runEventsForTest = async (page, ftmocksConifg, testName) => {
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
   await runEvents(page, events, ftmocksConifg.delay || 1000);
+};
+
+const getSelectorPosition = async (page, selector) => {
+  const element = await page.locator(selector).elementHandle();
+  const position = await element.boundingBox();
+  console.log("position", position);
+  return position;
 };
 
 const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
@@ -132,9 +175,169 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
   await runEvent(page, events[0]);
 };
 
+const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
+  let currentEventIndex = 0;
+  const eventsFile = path.join(
+    getMockDir(ftmocksConifg),
+    `test_${nameToFolder(testName)}`,
+    `_events.json`
+  );
+  const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+
+  // Expose Node function
+  await page.exposeFunction("getNextEvent", async () => {
+    let result = false;
+    while (!result) {
+      currentEventIndex = currentEventIndex + 1;
+      if (currentEventIndex === events.length) {
+        console.log("➡ No more events to validate!");
+        return;
+      }
+      result = isValidEvent(events[currentEventIndex]);
+    }
+    if (events[currentEventIndex]) {
+      const selector = await getLocator(page, events[currentEventIndex]);
+      const position = await getSelectorPosition(page, selector);
+      const element = await page.locator(selector).elementHandle();
+      return {
+        event: events[currentEventIndex],
+        selector,
+        position,
+        element,
+      };
+    }
+    return null;
+  });
+
+  // Inject keyboard listener into browser
+  await page.addInitScript(async () => {
+    let currentEventInfo = null;
+    // Create and style the popover
+    const popover = document.createElement("div");
+    popover.id = "ftmocks-popover-training-mode";
+    popover.style.position = "absolute";
+    popover.style.top = "0";
+    popover.style.left = "0";
+    popover.style.minWidth = "100px";
+    popover.style.height = "58px";
+    popover.style.background = "rgba(40,40,40,0.97)";
+    popover.style.color = "#fff";
+    popover.style.display = "none";
+    popover.style.zIndex = "99999";
+    popover.style.fontFamily = "sans-serif";
+    popover.style.fontSize = "16px";
+    popover.style.textAlign = "center";
+    popover.style.lineHeight = "1.5";
+    popover.style.padding = "16px 24px";
+    popover.style.borderRadius = "8px";
+    popover.style.boxShadow = "0 2px 12px rgba(0,0,0,0.25)";
+
+    function showPopover(message, position = { x: 0, y: 0 }) {
+      if (!document.getElementById("ftmocks-popover-training-mode")) {
+        document.body.appendChild(popover);
+      }
+      popover.textContent = message;
+      popover.style.display = "block";
+      popover.style.left = position.x + position.width / 2 + "px";
+      popover.style.top = position.y + position.height + "px";
+    }
+
+    function hidePopover() {
+      popover.style.display = "none";
+    }
+
+    const initialEventRun = async () => {
+      currentEventInfo = await window.getNextEvent();
+      if (currentEventInfo) {
+        showPopover(currentEventInfo.event.type, currentEventInfo.position);
+      }
+    };
+
+    window.addEventListener("click", async (event) => {
+      if (
+        currentEventInfo?.type === "click" &&
+        event.target.isEqualNode(currentEventInfo?.element) &&
+        currentEventInfo?.element?.contains(event.target)
+      ) {
+        currentEventInfo = await window.getNextEvent();
+        if (currentEventInfo) {
+          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        } else {
+          hidePopover();
+        }
+      } else {
+        initialEventRun();
+      }
+    });
+    window.addEventListener("dblclick", async (event) => {
+      if (
+        currentEventInfo?.type === "dblclick" &&
+        event.target.isEqualNode(currentEventInfo?.element) &&
+        currentEventInfo?.element?.contains(event.target)
+      ) {
+        currentEventInfo = await window.getNextEvent();
+        if (currentEventInfo) {
+          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        } else {
+          hidePopover();
+        }
+      } else {
+        initialEventRun();
+      }
+    });
+    window.addEventListener("contextmenu", async (event) => {
+      if (
+        currentEventInfo?.type === "contextmenu" &&
+        event.target.isEqualNode(currentEventInfo?.element) &&
+        currentEventInfo?.element?.contains(event.target)
+      ) {
+        currentEventInfo = await window.getNextEvent();
+        if (currentEventInfo) {
+          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        } else {
+          hidePopover();
+        }
+      } else {
+        initialEventRun();
+      }
+    });
+    window.addEventListener("input", async (event) => {
+      if (
+        currentEventInfo?.type === "input" &&
+        event.target.isEqualNode(currentEventInfo?.element) &&
+        currentEventInfo?.element?.contains(event.target)
+      ) {
+        currentEventInfo = await window.getNextEvent();
+        if (currentEventInfo) {
+          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        }
+      } else {
+        initialEventRun();
+      }
+    });
+    window.addEventListener("keypress", async (event) => {
+      if (
+        currentEventInfo?.type === "keypress" &&
+        event.target.isEqualNode(currentEventInfo?.element) &&
+        currentEventInfo?.element?.contains(event.target)
+      ) {
+        currentEventInfo = await window.getNextEvent();
+        if (currentEventInfo) {
+          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        }
+      } else {
+        initialEventRun();
+      }
+    });
+  });
+
+  await runEvent(page, events[0]);
+};
+
 module.exports = {
   runEvents,
   runEventsForTest,
   runEventsInPresentationMode,
+  runEventsInTrainingMode,
   runEvent,
 };
