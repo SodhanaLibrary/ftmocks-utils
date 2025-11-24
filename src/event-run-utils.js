@@ -162,8 +162,18 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
     currentEventIndex = currentEventIndex + 1;
   });
 
+  await page.exposeFunction("focusOnBodyForPresentationMode", async () => {
+    await page.bringToFront();
+  });
+
   // Inject keyboard listener into browser
   await page.addInitScript(() => {
+    window.addEventListener("load", async () => {
+      console.log("➡ focus on body for presentation mode");
+      await window.focusOnBodyForPresentationMode();
+      window.focus();
+      document.body.focus();
+    });
     window.addEventListener("keydown", (e) => {
       if (e.key === "ArrowRight") {
         console.log("➡ ArrowRight key pressed!");
@@ -232,14 +242,38 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     popover.style.borderRadius = "8px";
     popover.style.boxShadow = "0 2px 12px rgba(0,0,0,0.25)";
 
-    function showPopover(message, position = { x: 0, y: 0 }) {
+    const highlighter = document.createElement("div");
+    highlighter.id = "ftmocks-highlighter-training-mode";
+    highlighter.style.position = "absolute";
+    highlighter.style.top = "0";
+    highlighter.style.left = "0";
+    highlighter.style.width = "100%";
+    highlighter.style.height = "100%";
+    highlighter.style.background = "rgba(0,0,0,0.5)";
+    highlighter.style.border = "2px solid #3fa9f5";
+    highlighter.style.display = "none";
+    highlighter.style.pointerEvents = "none";
+
+    function showPopover(eventInfo) {
       if (!document.getElementById("ftmocks-popover-training-mode")) {
         document.body.appendChild(popover);
       }
-      popover.textContent = message;
+      popover.textContent = eventInfo.event.type;
       popover.style.display = "block";
-      popover.style.left = position.x + position.width / 2 + "px";
-      popover.style.top = position.y + position.height + "px";
+      popover.style.left =
+        eventInfo.position.x + eventInfo.position.width / 2 + "px";
+      popover.style.top =
+        eventInfo.position.y + eventInfo.position.height + "px";
+
+      // Show highlighter
+      if (!document.getElementById("ftmocks-highlighter-training-mode")) {
+        document.body.appendChild(highlighter);
+      }
+      highlighter.style.display = "block";
+      highlighter.style.left = eventInfo.position.x + "px";
+      highlighter.style.top = eventInfo.position.y + "px";
+      highlighter.style.width = eventInfo.position.width + "px";
+      highlighter.style.height = eventInfo.position.height + "px";
     }
 
     function hidePopover() {
@@ -249,84 +283,90 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     const initialEventRun = async () => {
       currentEventInfo = await window.getNextEvent();
       if (currentEventInfo) {
-        showPopover(currentEventInfo.event.type, currentEventInfo.position);
+        showPopover(currentEventInfo);
       }
     };
 
-    window.addEventListener("click", async (event) => {
-      if (
-        currentEventInfo?.type === "click" &&
-        event.target.isEqualNode(currentEventInfo?.element) &&
+    const matchElement = (event, currentEventInfo) => {
+      console.log(
+        "➡ Matching element!",
+        event.target.isEqualNode(currentEventInfo?.element),
         currentEventInfo?.element?.contains(event.target)
+      );
+      return (
+        event.target.isEqualNode(currentEventInfo?.element) ||
+        currentEventInfo?.element?.contains(event.target)
+      );
+    };
+
+    window.addEventListener("load", async () => {
+      await initialEventRun();
+    });
+
+    window.addEventListener("click", async (event) => {
+      console.log(
+        "➡ Click event triggered!",
+        event.target.isEqualNode(currentEventInfo?.element),
+        currentEventInfo?.element?.contains(event.target)
+      );
+      if (
+        currentEventInfo?.event?.type === "click" &&
+        matchElement(event, currentEventInfo)
       ) {
         currentEventInfo = await window.getNextEvent();
         if (currentEventInfo) {
-          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+          showPopover(currentEventInfo);
         } else {
           hidePopover();
         }
-      } else {
-        initialEventRun();
       }
     });
     window.addEventListener("dblclick", async (event) => {
       if (
-        currentEventInfo?.type === "dblclick" &&
-        event.target.isEqualNode(currentEventInfo?.element) &&
-        currentEventInfo?.element?.contains(event.target)
+        currentEventInfo?.event?.type === "dblclick" &&
+        matchElement(event, currentEventInfo)
       ) {
         currentEventInfo = await window.getNextEvent();
         if (currentEventInfo) {
-          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+          showPopover(currentEventInfo);
         } else {
           hidePopover();
         }
-      } else {
-        initialEventRun();
       }
     });
     window.addEventListener("contextmenu", async (event) => {
       if (
-        currentEventInfo?.type === "contextmenu" &&
-        event.target.isEqualNode(currentEventInfo?.element) &&
-        currentEventInfo?.element?.contains(event.target)
+        currentEventInfo?.event?.type === "contextmenu" &&
+        matchElement(event, currentEventInfo)
       ) {
         currentEventInfo = await window.getNextEvent();
         if (currentEventInfo) {
-          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+          showPopover(currentEventInfo);
         } else {
           hidePopover();
         }
-      } else {
-        initialEventRun();
       }
     });
     window.addEventListener("input", async (event) => {
       if (
-        currentEventInfo?.type === "input" &&
-        event.target.isEqualNode(currentEventInfo?.element) &&
-        currentEventInfo?.element?.contains(event.target)
+        currentEventInfo?.event?.type === "input" &&
+        matchElement(event, currentEventInfo)
       ) {
         currentEventInfo = await window.getNextEvent();
         if (currentEventInfo) {
-          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+          showPopover(currentEventInfo);
         }
-      } else {
-        initialEventRun();
       }
     });
     window.addEventListener("keypress", async (event) => {
       if (
-        currentEventInfo?.type === "keypress" &&
-        event.target.isEqualNode(currentEventInfo?.element) &&
-        currentEventInfo?.element?.contains(event.target)
+        currentEventInfo?.event?.type === "keypress" &&
+        matchElement(event, currentEventInfo)
       ) {
         currentEventInfo = await window.getNextEvent();
         if (currentEventInfo) {
-          showPopover(currentEventInfo.event.type, currentEventInfo.position);
+          showPopover(currentEventInfo);
         }
-      } else {
-        initialEventRun();
       }
     });
   });
