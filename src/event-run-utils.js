@@ -175,8 +175,9 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
       document.body.focus();
     });
     window.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowRight") {
-        console.log("➡ ArrowRight key pressed!");
+      console.log("➡ keydown event triggered!", e);
+      if (e.key === "Shift" && !e.repeat) {
+        e.preventDefault();
         window.nextEvent();
       }
     });
