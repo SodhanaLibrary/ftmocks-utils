@@ -37,51 +37,79 @@ const getLocator = async (page, event) => {
   return event.target;
 };
 
-const runEvent = async (page, event, delay = 0) => {
+const getSelectorPosition = async (page, selector) => {
+  const element = await page.locator(selector).elementHandle();
+  const position = await element.boundingBox();
+  console.log("position", position);
+  return position;
+};
+
+const runEvent = async ({
+  page,
+  event,
+  delay = 0,
+  screenshots = false,
+  screenshotsDir = null,
+}) => {
   try {
     console.log("➡ Running event", event);
+    const beforeEvent = async () => {
+      await page.waitForTimeout(delay);
+      if (screenshots) {
+        const locator = await getLocator(page, event);
+        const position = await getSelectorPosition(page, locator);
+        event.screenshotInfo = {
+          name: `${event.id}.png`,
+          position,
+        };
+        await page.screenshot({
+          path: path.join(screenshotsDir, `${event.id}.png`),
+          fullPage: false,
+        });
+      }
+    };
     switch (event.type) {
       case "url":
         await page.goto(event.value);
         break;
       case "click":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.click(await getLocator(page, event));
         break;
       case "input":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.fill(await getLocator(page, event), event.value);
         break;
       case "keypress":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.keyboard.press(await getLocator(page, event), event.key);
         break;
       case "change":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.select(await getLocator(page, event), event.value);
         break;
       case "url":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.goto(await getLocator(page, event), event.value);
         break;
       case "dblclick":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.dblclick(await getLocator(page, event));
         break;
       case "contextmenu":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.contextmenu(await getLocator(page, event));
         break;
       case "hover":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.hover(await getLocator(page, event));
         break;
       case "keydown":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.keyboard.down(await getLocator(page, event), event.key);
         break;
       case "keyup":
-        await page.waitForTimeout(delay);
+        await beforeEvent();
         await page.keyboard.up(await getLocator(page, event), event.key);
         break;
       default:
@@ -129,9 +157,15 @@ const isValidEvent = (event) => {
   return false;
 };
 
-const runEvents = async (page, events, delay = 1000) => {
+const runEvents = async ({
+  page,
+  events,
+  delay = 1000,
+  screenshots = false,
+  screenshotsDir = null,
+}) => {
   for (const event of events) {
-    await runEvent(page, event, delay);
+    await runEvent({ page, event, delay, screenshots, screenshotsDir });
   }
 };
 
@@ -142,14 +176,12 @@ const runEventsForTest = async (page, ftmocksConifg, testName) => {
     `_events.json`
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
-  await runEvents(page, events, ftmocksConifg.delay || 1000);
-};
-
-const getSelectorPosition = async (page, selector) => {
-  const element = await page.locator(selector).elementHandle();
-  const position = await element.boundingBox();
-  console.log("position", position);
-  return position;
+  await runEvents({
+    page,
+    events,
+    delay: ftmocksConifg.delay || 1000,
+    screenshots: false,
+  });
 };
 
 const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
@@ -168,10 +200,10 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
       console.log("➡ No more events to run!");
       return false;
     }
-    let result = await runEvent(page, events[currentEventIndex]);
+    let result = await runEvent({ page, event: events[currentEventIndex] });
     while (result === "Unsupported event type") {
       currentEventIndex = currentEventIndex + 1;
-      result = await runEvent(page, events[currentEventIndex]);
+      result = await runEvent({ page, event: events[currentEventIndex] });
     }
     currentEventIndex = currentEventIndex + 1;
     return true;
@@ -206,7 +238,7 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
     });
   });
 
-  await runEvent(page, events[0]);
+  await runEvent({ page, event: events[0] });
 };
 
 const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
@@ -375,6 +407,15 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
       }
     };
 
+    const showNextEvent = async () => {
+      currentEventInfo = await window.getNextEvent();
+      if (currentEventInfo) {
+        showPopover(currentEventInfo);
+      } else {
+        hidePopover();
+      }
+    };
+
     const matchElement = (event, currentEventInfo) => {
       const inBoudingBox =
         currentEventInfo?.position?.x <= event.clientX &&
@@ -400,13 +441,7 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
         matchElement(event, currentEventInfo)
       ) {
         console.log("➡ Click event triggered!", event);
-        currentEventInfo = await window.getNextEvent();
-        console.log("➡ Next event", currentEventInfo);
-        if (currentEventInfo) {
-          showPopover(currentEventInfo);
-        } else {
-          hidePopover();
-        }
+        showNextEvent();
       }
     });
     window.addEventListener("dblclick", async (event) => {
@@ -414,12 +449,7 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
         currentEventInfo?.event?.type === "dblclick" &&
         matchElement(event, currentEventInfo)
       ) {
-        currentEventInfo = await window.getNextEvent();
-        if (currentEventInfo) {
-          showPopover(currentEventInfo);
-        } else {
-          hidePopover();
-        }
+        showNextEvent();
       }
     });
     window.addEventListener("contextmenu", async (event) => {
@@ -427,12 +457,7 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
         currentEventInfo?.event?.type === "contextmenu" &&
         matchElement(event, currentEventInfo)
       ) {
-        currentEventInfo = await window.getNextEvent();
-        if (currentEventInfo) {
-          showPopover(currentEventInfo);
-        } else {
-          hidePopover();
-        }
+        showNextEvent();
       }
     });
     window.addEventListener("input", async (event) => {
@@ -440,10 +465,7 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
         currentEventInfo?.event?.type === "input" &&
         matchElement(event, currentEventInfo)
       ) {
-        currentEventInfo = await window.getNextEvent();
-        if (currentEventInfo) {
-          showPopover(currentEventInfo);
-        }
+        showNextEvent();
       }
     });
     window.addEventListener("keypress", async (event) => {
@@ -451,15 +473,35 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
         currentEventInfo?.event?.type === "keypress" &&
         matchElement(event, currentEventInfo)
       ) {
-        currentEventInfo = await window.getNextEvent();
-        if (currentEventInfo) {
-          showPopover(currentEventInfo);
-        }
+        showNextEvent();
       }
     });
   });
 
-  await runEvent(page, events[0]);
+  await runEvent({ page, event: events[0] });
+};
+
+const runEventsForScreenshots = async (page, ftmocksConifg, testName) => {
+  const eventsFile = path.join(
+    getMockDir(ftmocksConifg),
+    `test_${nameToFolder(testName)}`,
+    `_events.json`
+  );
+  const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  await runEvents({
+    page,
+    events,
+    delay: ftmocksConifg.delay || 1000,
+    screenshots: true,
+    screenshotsDir: path.join(
+      getMockDir(ftmocksConifg),
+      `test_${nameToFolder(testName)}`,
+      `screenshots`
+    ),
+  });
+  fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
+  await page.waitForTimeout(1000);
+  await page.close();
 };
 
 module.exports = {
@@ -467,5 +509,6 @@ module.exports = {
   runEventsForTest,
   runEventsInPresentationMode,
   runEventsInTrainingMode,
+  runEventsForScreenshots,
   runEvent,
 };
