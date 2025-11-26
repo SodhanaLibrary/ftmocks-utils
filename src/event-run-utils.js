@@ -4,19 +4,35 @@ const { getMockDir, nameToFolder } = require("./common-utils");
 
 const getLocator = async (page, event) => {
   // Check if the event.target exists on the page before returning it.
+  console.log("➡ Getting locator for event", event);
   if (event && event.target && typeof page !== "undefined" && page.locator) {
-    const count = await page.locator(event.target).count();
-    if (count === 1) {
-      return event.target;
-    } else {
-      await page.waitForTimeout(1000);
-      for (let i = 0; i < event.selectors.length; i++) {
-        const count = await page.locator(event.selectors[i].value).count();
+    let locator = null;
+    while (!locator) {
+      const selector = event.target.startsWith("/")
+        ? `xpath=${event.target}`
+        : event.target;
+      try {
+        const count = await page.locator(selector).count();
         if (count === 1) {
-          return event.selectors[i].value;
+          locator = selector;
+        } else {
+          for (let i = 0; i < event.selectors.length; i++) {
+            const selector = event.selectors[i].value.startsWith("/")
+              ? `xpath=${event.selectors[i].value}`
+              : event.selectors[i].value;
+            const count = await page.locator(selector).count();
+            if (count === 1) {
+              locator = selector;
+            }
+          }
         }
+      } catch (error) {
+        console.error("Error getting locator", error, selector);
       }
+      console.log("➡ Waiting for locator", event);
+      await page.waitForTimeout(500);
     }
+    return locator;
   }
   return event.target;
 };
@@ -83,8 +99,6 @@ const isValidEvent = (event) => {
   try {
     console.log("➡ Validating event", event);
     switch (event?.type) {
-      case "url":
-        return true;
       case "click":
         return true;
       case "input":
@@ -152,7 +166,7 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
     console.log("➡ Next event triggered!");
     if (currentEventIndex === events.length) {
       console.log("➡ No more events to run!");
-      return;
+      return false;
     }
     let result = await runEvent(page, events[currentEventIndex]);
     while (result === "Unsupported event type") {
@@ -160,10 +174,15 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
       result = await runEvent(page, events[currentEventIndex]);
     }
     currentEventIndex = currentEventIndex + 1;
+    return true;
   });
 
   await page.exposeFunction("focusOnBodyForPresentationMode", async () => {
     await page.bringToFront();
+  });
+
+  await page.exposeFunction("playwrightPageClose", async () => {
+    await page.close();
   });
 
   // Inject keyboard listener into browser
@@ -174,11 +193,15 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
       window.focus();
       document.body.focus();
     });
-    window.addEventListener("keydown", (e) => {
+    window.addEventListener("keydown", async (e) => {
       console.log("➡ keydown event triggered!", e);
       if (e.key === "Shift" && !e.repeat) {
         e.preventDefault();
-        window.nextEvent();
+        const result = await window.nextEvent();
+        if (!result) {
+          console.log("➡ No more events to run!");
+          await window.playwrightPageClose();
+        }
       }
     });
   });
@@ -187,7 +210,7 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
 };
 
 const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
-  let currentEventIndex = 0;
+  const executedEvents = [];
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
@@ -198,26 +221,45 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
   // Expose Node function
   await page.exposeFunction("getNextEvent", async () => {
     let result = false;
+    let nonExecutedEvents = events.filter(
+      (event) => !executedEvents.includes(event?.id)
+    );
+    let currentEventIndex = -1;
     while (!result) {
       currentEventIndex = currentEventIndex + 1;
-      if (currentEventIndex === events.length) {
+      if (currentEventIndex === nonExecutedEvents.length) {
         console.log("➡ No more events to validate!");
         return;
       }
-      result = isValidEvent(events[currentEventIndex]);
+      result = isValidEvent(nonExecutedEvents[currentEventIndex]);
     }
-    if (events[currentEventIndex]) {
-      const selector = await getLocator(page, events[currentEventIndex]);
+    if (nonExecutedEvents[currentEventIndex]) {
+      console.log(
+        "➡ Getting locator for event",
+        nonExecutedEvents[currentEventIndex]
+      );
+      const selector = await getLocator(
+        page,
+        nonExecutedEvents[currentEventIndex]
+      );
       const position = await getSelectorPosition(page, selector);
       const element = await page.locator(selector).elementHandle();
       return {
-        event: events[currentEventIndex],
+        event: nonExecutedEvents[currentEventIndex],
         selector,
         position,
         element,
       };
     }
     return null;
+  });
+
+  await page.exposeFunction("addExecutedEvent", (eventId) => {
+    executedEvents.push(eventId);
+  });
+
+  await page.exposeFunction("playwrightPageClose", async () => {
+    await page.close();
   });
 
   // Inject keyboard listener into browser
@@ -243,6 +285,44 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     popover.style.borderRadius = "8px";
     popover.style.boxShadow = "0 2px 12px rgba(0,0,0,0.25)";
 
+    // Success Training Popover
+    const successPopover = document.createElement("div");
+    successPopover.id = "ftmocks-success-popover-training-mode";
+    successPopover.style.position = "fixed";
+    successPopover.style.top = "32px";
+    successPopover.style.left = "50%";
+    successPopover.style.transform = "translateX(-50%)";
+    successPopover.style.minWidth = "120px";
+    successPopover.style.height = "46px";
+    successPopover.style.background = "rgba(60,180,75,0.98)";
+    successPopover.style.color = "#fff";
+    successPopover.style.display = "none";
+    successPopover.style.zIndex = "100000";
+    successPopover.style.fontFamily = "sans-serif";
+    successPopover.style.fontSize = "16px";
+    successPopover.style.textAlign = "center";
+    successPopover.style.lineHeight = "1.4";
+    successPopover.style.padding = "12px 32px";
+    successPopover.style.borderRadius = "8px";
+    successPopover.style.boxShadow = "0 2px 12px rgba(0,0,0,0.20)";
+    successPopover.textContent = "✅ Training Success!";
+
+    // Utility to show the success popover for a short period
+    function showSuccessPopover(message = "✅ Training Success!") {
+      successPopover.textContent = message;
+      if (!document.getElementById("ftmocks-success-popover-training-mode")) {
+        document.body.appendChild(successPopover);
+      }
+      successPopover.style.display = "block";
+      setTimeout(() => {
+        successPopover.style.display = "none";
+        document
+          .getElementById("ftmocks-success-popover-training-mode")
+          ?.remove();
+        window.playwrightPageClose();
+      }, 3000);
+    }
+
     const highlighter = document.createElement("div");
     highlighter.id = "ftmocks-highlighter-training-mode";
     highlighter.style.position = "absolute";
@@ -254,8 +334,11 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     highlighter.style.border = "2px solid #3fa9f5";
     highlighter.style.display = "none";
     highlighter.style.pointerEvents = "none";
+    highlighter.style.zIndex = "99999";
 
     function showPopover(eventInfo) {
+      console.log("➡ Showing popover", eventInfo);
+      window.addExecutedEvent(eventInfo.event.id);
       if (!document.getElementById("ftmocks-popover-training-mode")) {
         document.body.appendChild(popover);
       }
@@ -279,6 +362,10 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
 
     function hidePopover() {
       popover.style.display = "none";
+      highlighter.style.display = "none";
+      document.getElementById("ftmocks-popover-training-mode")?.remove();
+      document.getElementById("ftmocks-highlighter-training-mode")?.remove();
+      showSuccessPopover("✅ Training Success!");
     }
 
     const initialEventRun = async () => {
@@ -289,15 +376,18 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     };
 
     const matchElement = (event, currentEventInfo) => {
-      console.log(
-        "➡ Matching element!",
-        event.target.isEqualNode(currentEventInfo?.element),
-        currentEventInfo?.element?.contains(event.target)
-      );
-      return (
-        event.target.isEqualNode(currentEventInfo?.element) ||
-        currentEventInfo?.element?.contains(event.target)
-      );
+      const inBoudingBox =
+        currentEventInfo?.position?.x <= event.clientX &&
+        currentEventInfo?.position?.x + currentEventInfo?.position?.width >=
+          event.clientX &&
+        currentEventInfo?.position?.y <= event.clientY &&
+        currentEventInfo?.position?.y + currentEventInfo?.position?.height >=
+          event.clientY;
+      console.log("➡ In bounding box?", inBoudingBox);
+      const matchingElement =
+        currentEventInfo?.element?.isEqualNode(event.target) ||
+        currentEventInfo?.element?.contains(event.target);
+      return inBoudingBox || matchingElement;
     };
 
     window.addEventListener("load", async () => {
@@ -305,16 +395,13 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     });
 
     window.addEventListener("click", async (event) => {
-      console.log(
-        "➡ Click event triggered!",
-        event.target.isEqualNode(currentEventInfo?.element),
-        currentEventInfo?.element?.contains(event.target)
-      );
       if (
         currentEventInfo?.event?.type === "click" &&
         matchElement(event, currentEventInfo)
       ) {
+        console.log("➡ Click event triggered!", event);
         currentEventInfo = await window.getNextEvent();
+        console.log("➡ Next event", currentEventInfo);
         if (currentEventInfo) {
           showPopover(currentEventInfo);
         } else {
