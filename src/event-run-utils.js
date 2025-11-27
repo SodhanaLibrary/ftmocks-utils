@@ -8,18 +8,21 @@ const getLocator = async (page, event) => {
   if (event && event.target && typeof page !== "undefined" && page.locator) {
     let locator = null;
     while (!locator) {
-      const selector = event.target.startsWith("/")
-        ? `xpath=${event.target}`
-        : event.target;
+      const selector =
+        event.target.startsWith("/") || event.target.startsWith("(/")
+          ? `xpath=${event.target}`
+          : event.target;
       try {
         const count = await page.locator(selector).count();
         if (count === 1) {
           locator = selector;
         } else {
           for (let i = 0; i < event.selectors.length; i++) {
-            const selector = event.selectors[i].value.startsWith("/")
-              ? `xpath=${event.selectors[i].value}`
-              : event.selectors[i].value;
+            const selector =
+              event.selectors[i].value.startsWith("/") ||
+              event.selectors[i].value.startsWith("(/")
+                ? `xpath=${event.selectors[i].value}`
+                : event.selectors[i].value;
             const count = await page.locator(selector).count();
             if (count === 1) {
               locator = selector;
@@ -37,6 +40,51 @@ const getLocator = async (page, event) => {
   return event.target;
 };
 
+const healSelector = async (page, event, selector, position) => {
+  console.log("➡ Healing selector for event", event);
+  let locator = selector;
+  if (locator.startsWith("/") || locator.startsWith("(/")) {
+    locator = `xpath=${locator}`;
+    try {
+      // INSERT_YOUR_CODE
+      // Get all elements that match the given locator
+      const elements = await page.locator(locator).elementHandles();
+      if (elements.length > 1) {
+        let index = 0;
+        for (let i = 0; i < elements.length; i++) {
+          const element = elements[i];
+          const currPosition = await element.boundingBox();
+          if (
+            currPosition.x >= position.x &&
+            currPosition.y >= position.y &&
+            currPosition.x + currPosition.width <=
+              position.x + position.width &&
+            currPosition.y + currPosition.height <= position.y + position.height
+          ) {
+            index = i;
+            break;
+          }
+        }
+        return {
+          value: `(${selector})[${index + 1}]`,
+          count: 1,
+        };
+      } else {
+        return {
+          value: selector,
+          count: elements.length,
+        };
+      }
+    } catch (error) {
+      console.error("Error getting locator", error, selector);
+    }
+  }
+  return {
+    value: selector,
+    count: 1,
+  };
+};
+
 const getSelectorPosition = async (page, selector) => {
   const element = await page.locator(selector).elementHandle();
   const position = await element.boundingBox();
@@ -50,6 +98,7 @@ const runEvent = async ({
   delay = 0,
   screenshots = false,
   screenshotsDir = null,
+  healSelectors = false,
 }) => {
   try {
     console.log("➡ Running event", event);
@@ -66,6 +115,38 @@ const runEvent = async ({
           path: path.join(screenshotsDir, `${event.id}.png`),
           fullPage: false,
         });
+      }
+      if (healSelectors) {
+        const locator = await getLocator(page, event);
+        const position = await getSelectorPosition(page, locator);
+        const healedTarget = await healSelector(
+          page,
+          event,
+          event.target,
+          position
+        );
+        event.target = healedTarget.value;
+        const selectors = [];
+        const laterToBeAdded = [];
+        for (let i = 0; i < event.selectors.length; i++) {
+          const healedSelector = await healSelector(
+            page,
+            event,
+            event.selectors[i].value,
+            position
+          );
+          event.selectors[i].value = healedSelector.value;
+          if (healedSelector.count !== 1) {
+            laterToBeAdded.push(event.selectors[i]);
+          } else {
+            selectors.push(event.selectors[i]);
+          }
+        }
+        selectors.push(...laterToBeAdded);
+        if (healedTarget.count !== 1) {
+          event.target = selectors[0].value;
+        }
+        event.selectors = selectors;
       }
     };
     switch (event.type) {
@@ -163,9 +244,17 @@ const runEvents = async ({
   delay = 1000,
   screenshots = false,
   screenshotsDir = null,
+  healSelectors = false,
 }) => {
   for (const event of events) {
-    await runEvent({ page, event, delay, screenshots, screenshotsDir });
+    await runEvent({
+      page,
+      event,
+      delay,
+      screenshots,
+      screenshotsDir,
+      healSelectors,
+    });
   }
 };
 
@@ -504,11 +593,30 @@ const runEventsForScreenshots = async (page, ftmocksConifg, testName) => {
   await page.close();
 };
 
+const runEventsForHealingSelectors = async (page, ftmocksConifg, testName) => {
+  const eventsFile = path.join(
+    getMockDir(ftmocksConifg),
+    `test_${nameToFolder(testName)}`,
+    `_events.json`
+  );
+  const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  await runEvents({
+    page,
+    events,
+    delay: ftmocksConifg.delay || 1000,
+    healSelectors: true,
+  });
+  fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
+  await page.waitForTimeout(1000);
+  await page.close();
+};
+
 module.exports = {
   runEvents,
   runEventsForTest,
   runEventsInPresentationMode,
   runEventsInTrainingMode,
   runEventsForScreenshots,
+  runEventsForHealingSelectors,
   runEvent,
 };
