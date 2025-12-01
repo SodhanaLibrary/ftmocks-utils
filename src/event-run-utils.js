@@ -88,7 +88,8 @@ const healSelector = async (page, event, selector, position) => {
 const getSelectorPosition = async (page, selector) => {
   const element = await page.locator(selector).elementHandle();
   const position = await element.boundingBox();
-  console.log("position", position);
+  position.windowWidth = page.viewportSize().width;
+  position.windowHeight = page.viewportSize().height;
   return position;
 };
 
