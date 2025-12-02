@@ -2,6 +2,38 @@ const path = require("path");
 const fs = require("fs");
 const { getMockDir, nameToFolder } = require("./common-utils");
 
+const matchAndReplaceScreenshot = async (page, event, screenshotsDir) => {
+  const pixelmatch = (await import("pixelmatch")).default;
+  const { PNG } = (await import("pngjs")).default;
+
+  const file = path.join(screenshotsDir, `${event.id}.png`);
+  const newFile = path.join(screenshotsDir, `__temp_${event.id}.png`);
+
+  await page.screenshot({ path: newFile, fullPage: false });
+
+  if (!fs.existsSync(file)) {
+    fs.renameSync(newFile, file);
+    return true;
+  }
+
+  const img1 = PNG.sync.read(fs.readFileSync(file));
+  const img2 = PNG.sync.read(fs.readFileSync(newFile));
+
+  const diff = pixelmatch(img1.data, img2.data, null, img1.width, img1.height, {
+    threshold: 0.1,
+  });
+
+  if (diff > 0) {
+    console.log(`Screenshot changed → replacing: ${file}`);
+    fs.renameSync(newFile, file); // overwrite only when mismatch
+    return true;
+  } else {
+    console.log(`Screenshot did not change → removing temp file: ${newFile}`);
+    fs.unlinkSync(newFile); // no change → remove temp file
+    return false;
+  }
+};
+
 const getLocator = async (page, event) => {
   // Check if the event.target exists on the page before returning it.
   console.log("➡ Getting locator for event", event);
@@ -106,16 +138,20 @@ const runEvent = async ({
     const beforeEvent = async () => {
       await page.waitForTimeout(delay);
       if (screenshots) {
-        const locator = await getLocator(page, event);
-        const position = await getSelectorPosition(page, locator);
-        event.screenshotInfo = {
-          name: `${event.id}.png`,
-          position,
-        };
-        await page.screenshot({
-          path: path.join(screenshotsDir, `${event.id}.png`),
-          fullPage: false,
-        });
+        const replaced = await matchAndReplaceScreenshot(
+          page,
+          event,
+          screenshotsDir
+        );
+        if (replaced) {
+          const locator = await getLocator(page, event);
+          const position = await getSelectorPosition(page, locator);
+          event.screenshotInfo = {
+            name: `${event.id}.png`,
+            position,
+            time: new Date().toISOString(),
+          };
+        }
       }
       if (healSelectors) {
         const locator = await getLocator(page, event);
