@@ -2,6 +2,32 @@ const path = require("path");
 const fs = require("fs");
 const { getMockDir, nameToFolder } = require("./common-utils");
 
+const createDiffImage = async (img1, img2, diffPath) => {
+  const pixelmatch = (await import("pixelmatch")).default;
+  const { PNG } = (await import("pngjs")).default;
+
+  const { width, height } = img1;
+
+  const diff = new PNG({ width, height });
+
+  const numDiffPixels = pixelmatch(
+    img1.data,
+    img2.data,
+    diff.data,
+    width,
+    height,
+    {
+      threshold: 0.1, // sensitivity
+      diffColor: [255, 0, 0], // highlight color (red)
+      diffMask: false,
+    }
+  );
+
+  fs.writeFileSync(diffPath, PNG.sync.write(diff));
+
+  return numDiffPixels;
+};
+
 const matchAndReplaceScreenshot = async (page, event, screenshotsDir) => {
   const pixelmatch = (await import("pixelmatch")).default;
   const { PNG } = (await import("pngjs")).default;
@@ -13,7 +39,10 @@ const matchAndReplaceScreenshot = async (page, event, screenshotsDir) => {
 
   if (!fs.existsSync(file)) {
     fs.renameSync(newFile, file);
-    return true;
+    return {
+      replaced: true,
+      diffPath: null,
+    };
   }
 
   const img1 = PNG.sync.read(fs.readFileSync(file));
@@ -26,17 +55,27 @@ const matchAndReplaceScreenshot = async (page, event, screenshotsDir) => {
   if (diff > 0) {
     console.log(`Screenshot changed → replacing: ${file}`);
     fs.renameSync(newFile, file); // overwrite only when mismatch
-    return true;
+    await createDiffImage(
+      img1,
+      img2,
+      path.join(screenshotsDir, `diff_${event.id}.png`)
+    );
+    return {
+      replaced: true,
+      diffPath: `diff_${event.id}.png`,
+    };
   } else {
     console.log(`Screenshot did not change → removing temp file: ${newFile}`);
     fs.unlinkSync(newFile); // no change → remove temp file
-    return false;
+    return {
+      replaced: false,
+      diffPath: null,
+    };
   }
 };
 
 const getLocator = async (page, event) => {
   // Check if the event.target exists on the page before returning it.
-  console.log("➡ Getting locator for event", event);
   if (event && event.target && typeof page !== "undefined" && page.locator) {
     let locator = null;
     while (!locator) {
@@ -64,7 +103,6 @@ const getLocator = async (page, event) => {
       } catch (error) {
         console.error("Error getting locator", error, selector);
       }
-      console.log("➡ Waiting for locator", event);
       await page.waitForTimeout(500);
     }
     return locator;
@@ -134,22 +172,24 @@ const runEvent = async ({
   healSelectors = false,
 }) => {
   try {
-    console.log("➡ Running event", event);
     const beforeEvent = async () => {
       await page.waitForTimeout(delay);
       if (screenshots) {
-        const replaced = await matchAndReplaceScreenshot(
+        const res = await matchAndReplaceScreenshot(
           page,
           event,
           screenshotsDir
         );
-        if (replaced) {
+        if (res.replaced) {
           const locator = await getLocator(page, event);
           const position = await getSelectorPosition(page, locator);
           event.screenshotInfo = {
             name: `${event.id}.png`,
             position,
             time: new Date().toISOString(),
+            diffPath: res.diffPath
+              ? res.diffPath
+              : event.screenshotInfo?.diffPath,
           };
         }
       }
@@ -243,7 +283,6 @@ const runEvent = async ({
 
 const isValidEvent = (event) => {
   try {
-    console.log("➡ Validating event", event);
     switch (event?.type) {
       case "click":
         return true;
@@ -321,9 +360,7 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
 
   // Expose Node function
   await page.exposeFunction("nextEvent", async () => {
-    console.log("➡ Next event triggered!");
     if (currentEventIndex === events.length) {
-      console.log("➡ No more events to run!");
       return false;
     }
     let result = await runEvent({ page, event: events[currentEventIndex] });

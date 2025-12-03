@@ -1,6 +1,6 @@
 {
   "name": "ftmocks-utils",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "Util functions for FtMocks",
   "main": "src/index.js",
   "scripts": {
