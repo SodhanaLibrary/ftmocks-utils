@@ -652,8 +652,8 @@ const injectEventRecordingScript = async (
         });
       };
 
-      document.addEventListener("click", (event) => {
-        console.log('calling document.addEventListener("click")');
+      document.addEventListener("pointerdown", (event) => {
+        console.log('calling document.addEventListener("pointerdown")');
         currentEventSnapshot = document.documentElement.innerHTML;
         const currentTarget = getParentElementWithEventOrId(event, "onclick");
         const selectors = getBestSelectors(currentTarget, event);
