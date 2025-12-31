@@ -240,7 +240,7 @@ const runEvent = async ({
         break;
       case "keypress":
         await beforeEvent();
-        await page.keyboard.press(await getLocator(page, event), event.key);
+        await page.keyboard.press(event.key);
         break;
       case "change":
         await beforeEvent();
