@@ -6,14 +6,15 @@ const injectEventRecordingScript = async (
   page,
   url,
   ftmocksConifg,
-  testName
+  testName,
+  continueRecordEvents = false,
 ) => {
   console.log("calling injectEventRecordingScript");
   try {
     const eventsFile = path.join(
       getMockDir(ftmocksConifg),
       `test_${nameToFolder(testName)}`,
-      `_events.json`
+      `_events.json`,
     );
     if (!fs.existsSync(eventsFile)) {
       // Ensure the directory exists before writing the eventsFile
@@ -32,7 +33,7 @@ const injectEventRecordingScript = async (
       const screenshotsDir = path.join(
         getMockDir(ftmocksConifg),
         `test_${nameToFolder(testName)}`,
-        "screenshots"
+        "screenshots",
       );
       if (!fs.existsSync(screenshotsDir)) {
         fs.mkdirSync(screenshotsDir, { recursive: true });
@@ -41,7 +42,7 @@ const injectEventRecordingScript = async (
         getMockDir(ftmocksConifg),
         `test_${nameToFolder(testName)}`,
         "screenshots",
-        `screenshot_${imgOptions.name}.png`
+        `screenshot_${imgOptions.name}.png`,
       );
       fs.writeFileSync(screenshotFile, screenshot);
       return screenshotFile;
@@ -72,10 +73,23 @@ const injectEventRecordingScript = async (
       fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
     });
 
+    let existingEvents = [];
+    // Read events from events file, if it exists
+    if (continueRecordEvents && fs.existsSync(eventsFile)) {
+      try {
+        const data = fs.readFileSync(eventsFile, "utf8");
+        existingEvents = JSON.parse(data);
+      } catch (err) {
+        console.error("Failed to read events file:", err);
+        existingEvents = [];
+      }
+    }
+
     fs.writeFileSync(
       eventsFile,
       JSON.stringify(
         [
+          ...existingEvents,
           {
             id: crypto.randomUUID(),
             type: "url",
@@ -85,8 +99,8 @@ const injectEventRecordingScript = async (
           },
         ],
         null,
-        2
-      )
+        2,
+      ),
     );
     await page.addInitScript(() => {
       console.log("calling addInitScript");
@@ -149,7 +163,7 @@ const injectEventRecordingScript = async (
             doc,
             null,
             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-            null
+            null,
           );
           const elements = [];
           for (let i = 0; i < snapshot.snapshotLength; i++) {
@@ -224,7 +238,7 @@ const injectEventRecordingScript = async (
             document,
             null,
             XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-            null
+            null,
           );
           return elements.snapshotLength === 1;
         } catch (error) {
@@ -238,7 +252,7 @@ const injectEventRecordingScript = async (
       const getUniqueXpath = (xpath, mainElement) => {
         const prevElements = filterXpathElementsFromHtml(
           prevEventSnapshot,
-          xpath
+          xpath,
         );
         if (prevElements.snapshotLength > 1 && mainElement) {
           return `(${xpath})[${
@@ -251,7 +265,7 @@ const injectEventRecordingScript = async (
       const getUniqueElementSelectorNth = (selector, mainElement) => {
         const prevElements = filterElementsFromHtml(
           prevEventSnapshot,
-          selector
+          selector,
         );
         if (prevElements.length > 1) {
           return getElementsByRank(prevElements, mainElement)[0].index + 1;
@@ -264,11 +278,11 @@ const injectEventRecordingScript = async (
           if (selector.value.startsWith("/")) {
             const prevElements = filterXpathElementsFromHtml(
               prevEventSnapshot,
-              selector.value
+              selector.value,
             );
             const nextElements = filterXpathElementsFromHtml(
               currentEventSnapshot,
-              selector.value
+              selector.value,
             );
             return {
               selector: selector.value,
@@ -278,11 +292,11 @@ const injectEventRecordingScript = async (
           } else {
             const prevElements = filterElementsFromHtml(
               prevEventSnapshot,
-              selector.value
+              selector.value,
             );
             const nextElements = filterElementsFromHtml(
               currentEventSnapshot,
-              selector.value
+              selector.value,
             );
             return {
               selector: selector.value,
@@ -313,13 +327,13 @@ const injectEventRecordingScript = async (
             selectors.push({
               type: "locator",
               value: `${tagName}[data-testid='${element.getAttribute(
-                "data-testid"
+                "data-testid",
               )}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[data-testid='${element.getAttribute(
-                  "data-testid"
+                  "data-testid",
                 )}']`,
-                element
+                element,
               ),
             });
           }
@@ -329,7 +343,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[data-id='${element.getAttribute("data-id")}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[data-id='${element.getAttribute("data-id")}']`,
-                element
+                element,
               ),
             });
           }
@@ -337,13 +351,13 @@ const injectEventRecordingScript = async (
             selectors.push({
               type: "locator",
               value: `${tagName}[data-action='${element.getAttribute(
-                "data-action"
+                "data-action",
               )}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[data-action='${element.getAttribute(
-                  "data-action"
+                  "data-action",
                 )}']`,
-                element
+                element,
               ),
             });
           }
@@ -353,7 +367,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[data-cy='${element.getAttribute("data-cy")}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[data-cy='${element.getAttribute("data-cy")}']`,
-                element
+                element,
               ),
             });
           }
@@ -367,7 +381,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[name='${element.name}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[name='${element.name}']`,
-                element
+                element,
               ),
             });
           } else if (
@@ -380,7 +394,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[name='${element.name}'][value='${element.value}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[name='${element.name}'][value='${element.value}']`,
-                element
+                element,
               ),
             });
           }
@@ -390,7 +404,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[aria-label='${element.ariaLabel}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[aria-label='${element.ariaLabel}']`,
-                element
+                element,
               ),
             });
           }
@@ -400,7 +414,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[role='${element.role}'][name='${element.name}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[role='${element.role}'][name='${element.name}']`,
-                element
+                element,
               ),
             });
           }
@@ -410,7 +424,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[src='${element.getAttribute("src")}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[src='${element.getAttribute("src")}']`,
-                element
+                element,
               ),
             });
           }
@@ -420,7 +434,7 @@ const injectEventRecordingScript = async (
               value: `${tagName}[href='${element.getAttribute("href")}']`,
               nth: getUniqueElementSelectorNth(
                 `${tagName}[href='${element.getAttribute("href")}']`,
-                element
+                element,
               ),
             });
           }
@@ -433,7 +447,7 @@ const injectEventRecordingScript = async (
               type: "locator",
               value: getUniqueXpath(
                 `//${tagName}[@role='${element.role}' and normalize-space(.) = '${escapedText}']`,
-                element
+                element,
               ),
             });
           }
@@ -448,7 +462,7 @@ const injectEventRecordingScript = async (
                   .replace(/'/g, "\\'")
                   .replace(/\s+/g, " ")
                   .trim()}']`,
-                event.target
+                event.target,
               ),
             });
           }
@@ -604,7 +618,7 @@ const injectEventRecordingScript = async (
             target.getAttribute(`on${eventType}`) ||
             target.getAttribute(`${eventType}`) ||
             target.getAttribute(
-              `${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`
+              `${eventType.charAt(0).toUpperCase() + eventType.slice(1)}`,
             )
           ) {
             return target;
@@ -677,7 +691,7 @@ const injectEventRecordingScript = async (
         currentEventSnapshot = document.documentElement.innerHTML;
         const currentTarget = getParentElementWithEventOrId(
           event,
-          "ondblclick"
+          "ondblclick",
         );
         const selectors = getBestSelectors(currentTarget, event);
         getXpathsIncluded(selectors, currentTarget, event);
@@ -699,7 +713,7 @@ const injectEventRecordingScript = async (
         currentEventSnapshot = document.documentElement.innerHTML;
         const currentTarget = getParentElementWithEventOrId(
           event,
-          "oncontextmenu"
+          "oncontextmenu",
         );
         const selectors = getBestSelectors(currentTarget, event);
         getXpathsIncluded(selectors, currentTarget, event);
