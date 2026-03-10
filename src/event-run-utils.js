@@ -20,7 +20,7 @@ const createDiffImage = async (img1, img2, diffPath) => {
       threshold: 0.1, // sensitivity
       diffColor: [255, 0, 0], // highlight color (red)
       diffMask: false,
-    }
+    },
   );
 
   fs.writeFileSync(diffPath, PNG.sync.write(diff));
@@ -58,7 +58,7 @@ const matchAndReplaceScreenshot = async (page, event, screenshotsDir) => {
     await createDiffImage(
       img1,
       img2,
-      path.join(screenshotsDir, `diff_${event.id}.png`)
+      path.join(screenshotsDir, `diff_${event.id}.png`),
     );
     return {
       replaced: true,
@@ -170,6 +170,8 @@ const runEvent = async ({
   screenshots = false,
   screenshotsDir = null,
   healSelectors = false,
+  eventsFile = null,
+  allEvents = null,
 }) => {
   try {
     const beforeEvent = async () => {
@@ -178,7 +180,7 @@ const runEvent = async ({
         const res = await matchAndReplaceScreenshot(
           page,
           event,
-          screenshotsDir
+          screenshotsDir,
         );
         if (res.replaced) {
           const locator = await getLocator(page, event);
@@ -200,7 +202,7 @@ const runEvent = async ({
           page,
           event,
           event.target,
-          position
+          position,
         );
         event.target = healedTarget.value;
         const selectors = [];
@@ -210,7 +212,7 @@ const runEvent = async ({
             page,
             event,
             event.selectors[i].value,
-            position
+            position,
           );
           event.selectors[i].value = healedSelector.value;
           if (healedSelector.count !== 1) {
@@ -273,6 +275,10 @@ const runEvent = async ({
       default:
         return "Unsupported event type";
     }
+    if (eventsFile && allEvents) {
+      allEvents.find((e) => e.id === event.id).executed = true;
+      fs.writeFileSync(eventsFile, JSON.stringify(allEvents, null, 2));
+    }
   } catch (error) {
     console.error("Error running event", {
       error: error.message,
@@ -321,6 +327,8 @@ const runEvents = async ({
   screenshots = false,
   screenshotsDir = null,
   healSelectors = false,
+  eventsFile = null,
+  allEvents = null,
 }) => {
   for (const event of events) {
     await runEvent({
@@ -330,6 +338,8 @@ const runEvents = async ({
       screenshots,
       screenshotsDir,
       healSelectors,
+      eventsFile,
+      allEvents,
     });
   }
 };
@@ -338,14 +348,19 @@ const runEventsForTest = async (page, ftmocksConifg, testName) => {
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
-    `_events.json`
+    `_events.json`,
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  events.forEach((event) => {
+    event.executed = false;
+  });
   await runEvents({
     page,
     events,
     delay: ftmocksConifg.delay || 1000,
     screenshots: false,
+    eventsFile,
+    allEvents: events,
   });
 };
 
@@ -354,19 +369,32 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
-    `_events.json`
+    `_events.json`,
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  events.forEach((event) => {
+    event.executed = false;
+  });
 
   // Expose Node function
   await page.exposeFunction("nextEvent", async () => {
     if (currentEventIndex === events.length) {
       return false;
     }
-    let result = await runEvent({ page, event: events[currentEventIndex] });
+    let result = await runEvent({
+      page,
+      event: events[currentEventIndex],
+      eventsFile,
+      allEvents: events,
+    });
     while (result === "Unsupported event type") {
       currentEventIndex = currentEventIndex + 1;
-      result = await runEvent({ page, event: events[currentEventIndex] });
+      result = await runEvent({
+        page,
+        event: events[currentEventIndex],
+        eventsFile,
+        allEvents: events,
+      });
     }
     currentEventIndex = currentEventIndex + 1;
     return true;
@@ -401,7 +429,7 @@ const runEventsInPresentationMode = async (page, ftmocksConifg, testName) => {
     });
   });
 
-  await runEvent({ page, event: events[0] });
+  await runEvent({ page, event: events[0], eventsFile, allEvents: events });
 };
 
 const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
@@ -409,15 +437,17 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
-    `_events.json`
+    `_events.json`,
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
-
+  events.forEach((event) => {
+    event.executed = false;
+  });
   // Expose Node function
   await page.exposeFunction("getNextEvent", async () => {
     let result = false;
     let nonExecutedEvents = events.filter(
-      (event) => !executedEvents.includes(event?.id)
+      (event) => !executedEvents.includes(event?.id),
     );
     let currentEventIndex = -1;
     while (!result) {
@@ -431,11 +461,11 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     if (nonExecutedEvents[currentEventIndex]) {
       console.log(
         "➡ Getting locator for event",
-        nonExecutedEvents[currentEventIndex]
+        nonExecutedEvents[currentEventIndex],
       );
       const selector = await getLocator(
         page,
-        nonExecutedEvents[currentEventIndex]
+        nonExecutedEvents[currentEventIndex],
       );
       const position = await getSelectorPosition(page, selector);
       const element = await page.locator(selector).elementHandle();
@@ -641,16 +671,19 @@ const runEventsInTrainingMode = async (page, ftmocksConifg, testName) => {
     });
   });
 
-  await runEvent({ page, event: events[0] });
+  await runEvent({ page, event: events[0], eventsFile, allEvents: events });
 };
 
 const runEventsForScreenshots = async (page, ftmocksConifg, testName) => {
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
-    `_events.json`
+    `_events.json`,
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  events.forEach((event) => {
+    event.executed = false;
+  });
   await runEvents({
     page,
     events,
@@ -659,8 +692,10 @@ const runEventsForScreenshots = async (page, ftmocksConifg, testName) => {
     screenshotsDir: path.join(
       getMockDir(ftmocksConifg),
       `test_${nameToFolder(testName)}`,
-      `screenshots`
+      `screenshots`,
     ),
+    eventsFile,
+    allEvents: events,
   });
   fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
   await page.waitForTimeout(1000);
@@ -671,14 +706,19 @@ const runEventsForHealingSelectors = async (page, ftmocksConifg, testName) => {
   const eventsFile = path.join(
     getMockDir(ftmocksConifg),
     `test_${nameToFolder(testName)}`,
-    `_events.json`
+    `_events.json`,
   );
   const events = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
+  events.forEach((event) => {
+    event.executed = false;
+  });
   await runEvents({
     page,
     events,
     delay: ftmocksConifg.delay || 1000,
     healSelectors: true,
+    eventsFile,
+    allEvents: events,
   });
   fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2));
   await page.waitForTimeout(1000);
