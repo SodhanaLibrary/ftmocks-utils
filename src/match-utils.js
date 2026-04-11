@@ -38,7 +38,7 @@ function getMatchingMockData({
         }
       }
       served = mock.fileContent.served;
-      return compareMockToFetchRequest(mock, { url, options });
+      return compareMockToFetchRequest(mock, { url, options }, testConfig);
     }) || [];
   let foundMock = matchedMocks.find((mock) => !mock.fileContent.served)
     ? matchedMocks.find((mock) => !mock.fileContent.served)
@@ -46,29 +46,41 @@ function getMatchingMockData({
 
   if (!foundMock) {
     foundMock = defaultMockData.find((tm) =>
-      compareMockToFetchRequest(tm, {
-        url,
-        options,
-      })
+      compareMockToFetchRequest(
+        tm,
+        {
+          url,
+          options,
+        },
+        testConfig
+      )
     );
   }
 
   if (!foundMock && mode !== "strict") {
     const mockRanks = {};
     testMockData.forEach((tm) => {
-      const rank = getCompareRankMockToFetchRequest(tm, {
-        url,
-        options,
-      });
+      const rank = getCompareRankMockToFetchRequest(
+        tm,
+        {
+          url,
+          options,
+        },
+        testConfig
+      );
       if (rank > 0) {
         mockRanks[tm.id] = rank;
       }
     });
     defaultMockData.forEach((tm) => {
-      const rank = getCompareRankMockToFetchRequest(tm, {
-        url,
-        options,
-      });
+      const rank = getCompareRankMockToFetchRequest(
+        tm,
+        {
+          url,
+          options,
+        },
+        testConfig
+      );
       if (rank > 0) {
         mockRanks[tm.id] = rank;
       }
@@ -157,20 +169,28 @@ function getMatchingMockDataV2({
     const mockRanks = {};
     matchedMocks.forEach((mockId) => {
       const mock = testMockIdMap[mockId];
-      const rank = getCompareRankMockToFetchRequest(mock, {
-        url,
-        options,
-      });
+      const rank = getCompareRankMockToFetchRequest(
+        mock,
+        {
+          url,
+          options,
+        },
+        testConfig
+      );
       if (rank > 0) {
         mockRanks[mock.id] = rank;
       }
     });
     defaultMatchedMocks.forEach((mockId) => {
       const mock = defaultMockIdMap[mockId];
-      const rank = getCompareRankMockToFetchRequest(mock, {
-        url,
-        options,
-      });
+      const rank = getCompareRankMockToFetchRequest(
+        mock,
+        {
+          url,
+          options,
+        },
+        testConfig
+      );
       if (rank > 0) {
         mockRanks[mock.id] = rank;
       }

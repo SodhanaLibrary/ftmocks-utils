@@ -1,6 +1,10 @@
 const { clearNulls, charDifference, processURL } = require("./common-utils");
 const { FtJSON } = require("./json-utils");
-const { isUrlAndMethodSame } = require("./compare-utils");
+const {
+  isUrlAndMethodSame,
+  incomingHeadersMatchMock,
+  normalizeIncomingHeaders,
+} = require("./compare-utils");
 
 const getSameRequestRank = (req1, req2) => {
   let rank = 1;
@@ -21,7 +25,7 @@ const getSameRequestRank = (req1, req2) => {
   return rank;
 };
 
-function getCompareRankMockToFetchRequest(mock, fetchReq) {
+function getCompareRankMockToFetchRequest(mock, fetchReq, testConfig) {
   try {
     const mockURL = processURL(
       mock.fileContent.url,
@@ -34,6 +38,10 @@ function getCompareRankMockToFetchRequest(mock, fetchReq) {
         { url: reqURL, method: fetchReq.options.method || "GET" }
       )
     ) {
+      return 0;
+    }
+    const incomingHeaders = normalizeIncomingHeaders(fetchReq.options?.headers);
+    if (!incomingHeadersMatchMock(mock, incomingHeaders, testConfig)) {
       return 0;
     }
     const postData = mock.fileContent.request?.postData?.text

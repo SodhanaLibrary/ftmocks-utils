@@ -46,6 +46,7 @@ async function initiatePlaywrightRoutes(
       url,
       method: request.method(),
       body: request.postData(),
+      headers: request.headers(),
     };
     if (excludeMockPath && new RegExp(excludeMockPath).test(url)) {
       await route.fallback();
