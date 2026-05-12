@@ -2,6 +2,49 @@ const path = require("path");
 const fs = require("fs");
 const { FtJSON } = require("./json-utils");
 
+/** Path extensions usually served as static assets (bundles, styles, fonts, media). */
+const STATIC_ASSET_EXTENSIONS = new Set([
+  ".avif",
+  ".css",
+  ".eot",
+  ".gif",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".map",
+  ".mp3",
+  ".mp4",
+  ".ogg",
+  ".otf",
+  ".pdf",
+  ".png",
+  ".svg",
+  ".ttf",
+  ".wasm",
+  ".wav",
+  ".webm",
+  ".webp",
+  ".woff",
+  ".woff2",
+]);
+
+function isLikelyStaticAssetUrl(url) {
+  if (!url || typeof url !== "string") {
+    return false;
+  }
+  let pathname;
+  try {
+    pathname = new URL(url, "http://localhost").pathname;
+  } catch {
+    pathname = url.split("?")[0].split("#")[0];
+  }
+  const ext = path.extname(pathname).toLowerCase();
+  return STATIC_ASSET_EXTENSIONS.has(ext);
+}
+
 const charDifference = (str1, str2) => {
   if (str1 && str2) {
     let count1 = {};
@@ -225,4 +268,5 @@ module.exports = {
   createIdMap,
   createMethodPathnameIdMap,
   getMockKey,
+  isLikelyStaticAssetUrl,
 };

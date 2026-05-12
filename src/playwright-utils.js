@@ -1,5 +1,10 @@
 const { getMatchingMockData } = require("./match-utils");
-const { getMockDir, nameToFolder, getHeaders } = require("./common-utils");
+const {
+  getMockDir,
+  nameToFolder,
+  getHeaders,
+  isLikelyStaticAssetUrl,
+} = require("./common-utils");
 const { getFallbackDir } = require("./common-utils");
 const { getTestByName } = require("./common-utils");
 const { compareMockToMock } = require("./compare-utils");
@@ -192,7 +197,9 @@ async function initiatePlaywrightRoutes(
             headers: { "Content-Type": contentType },
           });
         } else {
-          logger.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
+          if (!isLikelyStaticAssetUrl(url)) {
+            logger.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
+          }
           await route.fallback();
         }
       }

@@ -3,7 +3,7 @@ const { loadMockDataFromConfig } = require("./mock-utils");
 const { resetAllMockStats } = require("./mock-utils");
 const { getDefaultMockDataFromConfig } = require("./mock-utils");
 const { FtJSON } = require("./json-utils");
-const { getMockDir, nameToFolder } = require("./common-utils");
+const { getMockDir, nameToFolder, isLikelyStaticAssetUrl } = require("./common-utils");
 const { saveSnap } = require("./snap-utils");
 const path = require("path");
 const fs = require("fs");
@@ -28,7 +28,9 @@ async function initiateJestFetch(jest, ftmocksConifg, testName) {
     if (mockData) {
       console.debug("mocked", url, options);
     } else {
-      console.debug("missing mock data", url, options);
+      if (!isLikelyStaticAssetUrl(url)) {
+        console.debug("missing mock data", url, options);
+      }
       return Promise.resolve({
         status: 404,
         headers: new Map([["Content-Type", "application/json"]]),
@@ -93,7 +95,9 @@ async function initiateJestFetch(jest, ftmocksConifg, testName) {
           xhrMock.onload();
         }
       } else {
-        console.debug("missing mock data", xhrMock._url, xhrMock._options);
+        if (!isLikelyStaticAssetUrl(xhrMock._url)) {
+          console.debug("missing mock data", xhrMock._url, xhrMock._options);
+        }
 
         xhrMock.status = 404;
         xhrMock.responseText = JSON.stringify({ error: "Mock data not found" });
