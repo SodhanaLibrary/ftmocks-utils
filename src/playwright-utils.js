@@ -14,6 +14,7 @@ const { getDefaultMockDataFromConfig } = require("./mock-utils");
 const { Logger } = require("./log-utils");
 const { saveIfItIsFile } = require("./file-utils");
 const { createTest } = require("./test-utils");
+const { ensureServedFile, stripServedFromMock } = require("./served-utils");
 const path = require("path");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -297,7 +298,6 @@ async function recordPlaywrightRoutes(
           content: fileName ? null : await response.text(),
         },
         id: crypto.randomUUID(),
-        served: false,
         ignoreParams: ftmocksConifg.ignoreParams || [],
       };
 
@@ -356,13 +356,17 @@ async function recordPlaywrightRoutes(
       if (!fs.existsSync(testDir)) {
         fs.mkdirSync(testDir, { recursive: true });
       }
+      ensureServedFile(testDir);
       fs.writeFileSync(mockListPath, JSON.stringify(mockList, null, 2));
       const mocDataPath = path.join(
         getMockDir(ftmocksConifg),
         `test_${nameToFolder(config.testName)}`,
         `mock_${mockData.id}.json`
       );
-      fs.writeFileSync(mocDataPath, JSON.stringify(mockData, null, 2));
+      fs.writeFileSync(
+        mocDataPath,
+        JSON.stringify(stripServedFromMock(mockData), null, 2)
+      );
       await route.fulfill({
         status: response.status(),
         headers: response.headers(),

@@ -30,6 +30,12 @@ const {
   runEventsForScreenshots,
   runEventsForHealingSelectors,
 } = require("./event-run-utils");
+const {
+  resetServed,
+  markMockServed,
+  loadServedIds,
+  SERVED_FILE,
+} = require("./served-utils");
 
 // Export functions as a module
 module.exports = {
@@ -43,6 +49,10 @@ module.exports = {
   compareMockToFetchRequest,
   getMatchingMockData,
   resetAllMockStats,
+  resetServed,
+  markMockServed,
+  loadServedIds,
+  SERVED_FILE,
   initiateJestFetch,
   saveSnap,
   deleteAllSnaps,

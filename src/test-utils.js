@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { getMockDir, nameToFolder } = require("./common-utils");
+const { ensureServedFile } = require("./served-utils");
 const { v4: uuidv4 } = require("uuid");
 
 const createTest = async (ftmocksConifg, testName) => {
@@ -23,16 +24,9 @@ const createTest = async (ftmocksConifg, testName) => {
         `test_${nameToFolder(testName)}`
       );
       const mockListFilePath = path.join(folderPath, "_mock_list.json");
-      fs.mkdir(folderPath, { recursive: true }, (err) => {
-        if (err) {
-          console.error("\x1b[31mError creating directory:\x1b[0m", err);
-        } else {
-          console.log("\x1b[32mDirectory created successfully!\x1b[0m");
-        }
-      });
-      await fs.appendFile(mockListFilePath, "[]", () => {
-        console.log("\x1b[32mmock list file created successfully\x1b[0m");
-      });
+      fs.mkdirSync(folderPath, { recursive: true });
+      fs.writeFileSync(mockListFilePath, "[]", "utf8");
+      ensureServedFile(folderPath);
 
       return newTest;
     } else {

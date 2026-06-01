@@ -1,13 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { getMockDir, nameToFolder } = require("./common-utils");
+const { attachServedToMocks, resetServed } = require("./served-utils");
 
 const getDefaultMockDataFromConfig = (testConfig) => {
-  const defaultPath = path.join(
-    getMockDir(testConfig),
-    "defaultMocks",
-    "_mock_list.json"
-  );
+  const defaultFolder = path.join(getMockDir(testConfig), "defaultMocks");
+  const defaultPath = path.join(defaultFolder, "_mock_list.json");
 
   try {
     const defaultData = fs.readFileSync(defaultPath, "utf8");
@@ -28,6 +26,7 @@ const getDefaultMockDataFromConfig = (testConfig) => {
         return entry; // Return the original entry if there's an error
       }
     });
+    attachServedToMocks(parsedData, defaultFolder);
     return parsedData;
   } catch (error) {
     console.error(`Error reading or parsing default mocks:`, error);
@@ -49,27 +48,25 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
       testName = config.testName;
     }
     // Read the tests from testConfig
-    const mocksPath = path.join(
+    const testFolder = path.join(
       getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      "_mock_list.json"
+      `test_${nameToFolder(testName)}`
     );
+    const mocksPath = path.join(testFolder, "_mock_list.json");
     const mocksData = fs.readFileSync(mocksPath, "utf8");
     const mocks = JSON.parse(mocksData);
 
     mocks.forEach((mock) => {
       const fileContent = JSON.parse(
         fs.readFileSync(
-          path.join(
-            getMockDir(testConfig),
-            `test_${nameToFolder(testName)}`,
-            `mock_${mock.id}.json`
-          ),
+          path.join(testFolder, `mock_${mock.id}.json`),
           "utf8"
         )
       );
       mock.fileContent = fileContent;
     });
+
+    attachServedToMocks(mocks, testFolder);
 
     return mocks;
   } catch (error) {
@@ -79,19 +76,16 @@ const loadMockDataFromConfig = (testConfig, _testName) => {
 };
 
 async function resetAllMockStats({ testMockData, testConfig, testName }) {
-  for (let i = 0; i < testMockData.length; i++) {
-    const tmd = testMockData[i];
-    const mockFilePath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      `mock_${tmd.id}.json`
-    );
-    tmd.fileContent.served = false;
-    await fs.writeFileSync(
-      mockFilePath,
-      JSON.stringify(tmd.fileContent, null, 2)
-    );
-  }
+  const testFolder = path.join(
+    getMockDir(testConfig),
+    `test_${nameToFolder(testName)}`
+  );
+  resetServed(testFolder);
+  testMockData.forEach((tmd) => {
+    if (tmd.fileContent) {
+      tmd.fileContent.served = false;
+    }
+  });
 }
 
 module.exports = {

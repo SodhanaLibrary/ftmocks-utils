@@ -1,14 +1,11 @@
 const { compareMockToFetchRequest } = require("./compare-utils");
 const { getCompareRankMockToFetchRequest } = require("./rank-compare-utils");
 const {
-  getMockDir,
-  nameToFolder,
   createIdMap,
   createMethodPathnameIdMap,
   getMockKey,
 } = require("./common-utils");
-const path = require("path");
-const fs = require("fs");
+const { markFoundMockServed } = require("./served-utils");
 
 function getMatchingMockData({
   testMockData,
@@ -96,25 +93,8 @@ function getMatchingMockData({
       }
     }
   }
-  // updating stats to mock file
   if (foundMock) {
-    let mockFilePath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      `mock_${foundMock.id}.json`
-    );
-    if (!fs.existsSync(mockFilePath)) {
-      mockFilePath = path.join(
-        getMockDir(testConfig),
-        "defaultMocks",
-        `mock_${foundMock.id}.json`
-      );
-    }
-    foundMock.fileContent.served = true;
-    fs.writeFileSync(
-      mockFilePath,
-      JSON.stringify(foundMock.fileContent, null, 2)
-    );
+    markFoundMockServed(foundMock, testConfig, testName);
   }
   return foundMock ? foundMock.fileContent : null;
 }
@@ -204,25 +184,8 @@ function getMatchingMockDataV2({
       }
     }
   }
-  // updating stats to mock file
   if (foundMock) {
-    let mockFilePath = path.join(
-      getMockDir(testConfig),
-      `test_${nameToFolder(testName)}`,
-      `mock_${foundMock.id}.json`
-    );
-    if (!fs.existsSync(mockFilePath)) {
-      mockFilePath = path.join(
-        getMockDir(testConfig),
-        "defaultMocks",
-        `mock_${foundMock.id}.json`
-      );
-    }
-    foundMock.fileContent.served = true;
-    fs.writeFileSync(
-      mockFilePath,
-      JSON.stringify(foundMock.fileContent, null, 2)
-    );
+    markFoundMockServed(foundMock, testConfig, testName);
   }
   return foundMock ? foundMock.fileContent : null;
 }
