@@ -3,7 +3,7 @@ const {
   getMockDir,
   nameToFolder,
   getHeaders,
-  isLikelyStaticAssetUrl,
+  shouldLogMissingMockData,
 } = require("./common-utils");
 const { getFallbackDir } = require("./common-utils");
 const { getTestByName } = require("./common-utils");
@@ -96,11 +96,13 @@ async function initiatePlaywrightRoutes(
             const fileContent = fs.readFileSync(filePath);
             json.body = fileContent;
 
-            console.debug(
-              "\x1b[32mresponse is a file, serving file\x1b[0m",
-              filePath,
-              url
-            );
+            if (shouldLogMissingMockData(url, ftmocksConifg)) {
+              console.debug(
+                "\x1b[32mresponse is a file, serving file\x1b[0m",
+                filePath,
+                url
+              );
+            }
             await route.fulfill(json);
           }
         } else {
@@ -198,7 +200,7 @@ async function initiatePlaywrightRoutes(
             headers: { "Content-Type": contentType },
           });
         } else {
-          if (!isLikelyStaticAssetUrl(url)) {
+          if (shouldLogMissingMockData(url, ftmocksConifg)) {
             logger.debug("\x1b[31mmissing mock data, falling back\x1b[0m", url);
           }
           await route.fallback();

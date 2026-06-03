@@ -3,7 +3,11 @@ const { loadMockDataFromConfig } = require("./mock-utils");
 const { resetAllMockStats } = require("./mock-utils");
 const { getDefaultMockDataFromConfig } = require("./mock-utils");
 const { FtJSON } = require("./json-utils");
-const { getMockDir, nameToFolder, isLikelyStaticAssetUrl } = require("./common-utils");
+const {
+  getMockDir,
+  nameToFolder,
+  shouldLogMissingMockData,
+} = require("./common-utils");
 const { saveSnap } = require("./snap-utils");
 const path = require("path");
 const fs = require("fs");
@@ -28,7 +32,7 @@ async function initiateJestFetch(jest, ftmocksConifg, testName) {
     if (mockData) {
       console.debug("mocked", url, options);
     } else {
-      if (!isLikelyStaticAssetUrl(url)) {
+      if (shouldLogMissingMockData(url, ftmocksConifg)) {
         console.debug("missing mock data", url, options);
       }
       return Promise.resolve({
@@ -95,7 +99,7 @@ async function initiateJestFetch(jest, ftmocksConifg, testName) {
           xhrMock.onload();
         }
       } else {
-        if (!isLikelyStaticAssetUrl(xhrMock._url)) {
+        if (shouldLogMissingMockData(xhrMock._url, ftmocksConifg)) {
           console.debug("missing mock data", xhrMock._url, xhrMock._options);
         }
 

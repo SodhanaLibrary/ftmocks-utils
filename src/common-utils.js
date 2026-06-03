@@ -45,6 +45,58 @@ function isLikelyStaticAssetUrl(url) {
   return STATIC_ASSET_EXTENSIONS.has(ext);
 }
 
+const LOG_IGNORE_FILENAME = ".logIgnore";
+const logIgnoreCache = new Map();
+
+function parseLogIgnorePatterns(content) {
+  const patterns = [];
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    try {
+      patterns.push(new RegExp(trimmed));
+    } catch (e) {
+      console.warn(
+        `\x1b[33mInvalid regex in ${LOG_IGNORE_FILENAME}, skipping:\x1b[0m`,
+        trimmed,
+        e.message
+      );
+    }
+  }
+  return patterns;
+}
+
+function getLogIgnorePatterns(config) {
+  const mockDir = getMockDir(config);
+  const filePath = path.join(mockDir, LOG_IGNORE_FILENAME);
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  const stat = fs.statSync(filePath);
+  const cached = logIgnoreCache.get(mockDir);
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.patterns;
+  }
+  const patterns = parseLogIgnorePatterns(
+    fs.readFileSync(filePath, "utf8")
+  );
+  logIgnoreCache.set(mockDir, { mtimeMs: stat.mtimeMs, patterns });
+  return patterns;
+}
+
+function isUrlInLogIgnore(url, config) {
+  if (!url || typeof url !== "string") {
+    return false;
+  }
+  return getLogIgnorePatterns(config).some((pattern) => pattern.test(url));
+}
+
+function shouldLogMissingMockData(url, config) {
+  return !isLikelyStaticAssetUrl(url) && !isUrlInLogIgnore(url, config);
+}
+
 const charDifference = (str1, str2) => {
   if (str1 && str2) {
     let count1 = {};
@@ -269,4 +321,5 @@ module.exports = {
   createMethodPathnameIdMap,
   getMockKey,
   isLikelyStaticAssetUrl,
+  shouldLogMissingMockData,
 };
