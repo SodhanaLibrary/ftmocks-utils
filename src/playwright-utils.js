@@ -28,12 +28,12 @@ async function initiatePlaywrightRoutes(
   ftmocksConifg,
   testName,
   mockPath = "**/*",
-  excludeMockPath = null
+  excludeMockPath = null,
 ) {
   logger = new Logger(
     { disableLogs: ftmocksConifg.DISABLE_LOGS },
     ftmocksConifg,
-    testName
+    testName,
   );
   const testMockData = testName
     ? loadMockDataFromConfig(ftmocksConifg, testName)
@@ -82,14 +82,14 @@ async function initiatePlaywrightRoutes(
             getMockDir(ftmocksConifg),
             `test_${nameToFolder(testName)}`,
             "_files",
-            file
+            file,
           );
           if (!fs.existsSync(filePath)) {
             filePath = path.join(
               getMockDir(ftmocksConifg),
               "defaultMocks",
               "_files",
-              file
+              file,
             );
           }
           if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
@@ -100,7 +100,7 @@ async function initiatePlaywrightRoutes(
               console.debug(
                 "\x1b[32mresponse is a file, serving file\x1b[0m",
                 filePath,
-                url
+                url,
               );
             }
             await route.fulfill(json);
@@ -119,7 +119,7 @@ async function initiatePlaywrightRoutes(
           fallbackDir,
           urlObj.pathname === "/" || urlObj.pathname === ""
             ? ftmocksConifg.FALLBACK_DIR_INDEX_FILE || "index.html"
-            : urlObj.pathname
+            : urlObj.pathname,
         );
 
         if (
@@ -129,12 +129,13 @@ async function initiatePlaywrightRoutes(
         ) {
           filePath = path.join(
             fallbackDir,
-            ftmocksConifg.FALLBACK_DIR_INDEX_FILE_FOR_STATUS_404 || "index.html"
+            ftmocksConifg.FALLBACK_DIR_INDEX_FILE_FOR_STATUS_404 ||
+              "index.html",
           );
           logger.debug(
             "\x1b[32mserving file for status 404\x1b[0m",
             filePath,
-            url
+            url,
           );
         }
         if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
@@ -211,7 +212,7 @@ async function initiatePlaywrightRoutes(
       logger.error(
         "\x1b[31merror at initiatePlaywrightRoutes\x1b[0m",
         url,
-        options
+        options,
       );
     }
   });
@@ -242,7 +243,7 @@ async function recordPlaywrightRoutes(
     pattern: "^/api/.*",
     avoidDuplicatesInTheTest: false,
     avoidDuplicatesWithDefaultMocks: false,
-  }
+  },
 ) {
   await page.route(config.mockPath, async (route) => {
     const currentRequest = route.request();
@@ -268,7 +269,7 @@ async function recordPlaywrightRoutes(
         currentRequest,
         response,
         config.testName,
-        ftmocksConifg
+        ftmocksConifg,
       );
 
       const mockData = {
@@ -278,13 +279,13 @@ async function recordPlaywrightRoutes(
         request: {
           headers: excludeHeaders(
             await currentRequest.headers(),
-            ftmocksConifg
+            ftmocksConifg,
           ),
           queryString: Array.from(urlObj.searchParams.entries()).map(
             ([name, value]) => ({
               name,
               value,
-            })
+            }),
           ),
           postData: currentRequest.postData()
             ? {
@@ -308,10 +309,10 @@ async function recordPlaywrightRoutes(
         // Check if the mock data is a duplicate of a mock data in the test
         const testMockList = loadMockDataFromConfig(
           ftmocksConifg,
-          config.testName
+          config.testName,
         );
         const matchResponse = testMockList.find((mock) =>
-          compareMockToMock(mock.fileContent, mockData, true)
+          compareMockToMock(mock.fileContent, mockData, true),
         );
         if (matchResponse) {
           console.log("Aborting duplicate mock data in the test");
@@ -324,7 +325,7 @@ async function recordPlaywrightRoutes(
         // Check if the mock data is a duplicate of a mock data in the test
         const defaultMockList = getDefaultMockDataFromConfig(ftmocksConifg);
         const matchResponse = defaultMockList.find((mock) =>
-          compareMockToMock(mock.fileContent, mockData, true)
+          compareMockToMock(mock.fileContent, mockData, true),
         );
         if (matchResponse) {
           console.log("Aborting duplicate mock data with default mocks");
@@ -337,7 +338,7 @@ async function recordPlaywrightRoutes(
       const mockListPath = path.join(
         getMockDir(ftmocksConifg),
         `test_${nameToFolder(config.testName)}`,
-        "_mock_list.json"
+        "_mock_list.json",
       );
       let mockList = [];
       if (fs.existsSync(mockListPath)) {
@@ -353,7 +354,7 @@ async function recordPlaywrightRoutes(
       // Create test directory if it doesn't exist
       const testDir = path.join(
         getMockDir(ftmocksConifg),
-        `test_${nameToFolder(config.testName)}`
+        `test_${nameToFolder(config.testName)}`,
       );
       if (!fs.existsSync(testDir)) {
         fs.mkdirSync(testDir, { recursive: true });
@@ -363,11 +364,11 @@ async function recordPlaywrightRoutes(
       const mocDataPath = path.join(
         getMockDir(ftmocksConifg),
         `test_${nameToFolder(config.testName)}`,
-        `mock_${mockData.id}.json`
+        `mock_${mockData.id}.json`,
       );
       fs.writeFileSync(
         mocDataPath,
-        JSON.stringify(stripServedFromMock(mockData), null, 2)
+        JSON.stringify(stripServedFromMock(mockData), null, 2),
       );
       await route.fulfill({
         status: response.status(),

@@ -29,6 +29,8 @@ const STATIC_ASSET_EXTENSIONS = new Set([
   ".webp",
   ".woff",
   ".woff2",
+  ".js",
+  ".css",
 ]);
 
 function isLikelyStaticAssetUrl(url) {
@@ -61,7 +63,7 @@ function parseLogIgnorePatterns(content) {
       console.warn(
         `\x1b[33mInvalid regex in ${LOG_IGNORE_FILENAME}, skipping:\x1b[0m`,
         trimmed,
-        e.message
+        e.message,
       );
     }
   }
@@ -79,9 +81,7 @@ function getLogIgnorePatterns(config) {
   if (cached && cached.mtimeMs === stat.mtimeMs) {
     return cached.patterns;
   }
-  const patterns = parseLogIgnorePatterns(
-    fs.readFileSync(filePath, "utf8")
-  );
+  const patterns = parseLogIgnorePatterns(fs.readFileSync(filePath, "utf8"));
   logIgnoreCache.set(mockDir, { mtimeMs: stat.mtimeMs, patterns });
   return patterns;
 }
@@ -153,7 +153,7 @@ const capitalizeHeaders = (headers) => {
     Object.entries(headers).map(([key, value]) => [
       capitalizeHeader(key),
       value,
-    ])
+    ]),
   );
 };
 
